@@ -1,451 +1,355 @@
 #!/usr/bin/env python3
 """
-WebOS Desktop 代理服务器
-专门用于绕过X-Frame-Options限制，让浏览器应用能够访问百度等网站
+Web桌面系统 - 代理服务器
+用于转发网页请求，解决CORS和iframe限制问题
 """
 
 import http.server
 import socketserver
 import urllib.request
 import urllib.parse
-import sys
-import threading
-import time
-import gzip
-import io
-from urllib.error import URLError, HTTPError
+import urllib.error
+import json
+import re
+from urllib.parse import urlparse, urljoin
+import ssl
+import socket
 
-class ProxyRequestHandler(http.server.BaseHTTPRequestHandler):
-    """代理请求处理器"""
+class ProxyHandler(http.server.BaseHTTPRequestHandler):
+    def __init__(self, *args, **kwargs):
+        # 忽略SSL证书验证（仅用于开发环境）
+        ssl._create_default_https_context = ssl._create_unverified_context
+        super().__init__(*args, **kwargs)
     
     def do_GET(self):
         """处理GET请求"""
-        try:
-            # 解析代理URL参数
-            if self.path.startswith('/proxy?url='):
-                # 提取目标URL
-                query = self.path[7:]  # 移除 '/proxy?'
-                params = urllib.parse.parse_qs(query)
-                
-                if 'url' not in params:
-                    self.send_error(400, "Missing URL parameter")
-                    return
-                
-                target_url = params['url'][0]
-                
-                # 验证URL
-                if not target_url.startswith(('http://', 'https://')):
-                    target_url = 'https://' + target_url
-                
-                self.proxy_request(target_url)
-                
-            elif self.path == '/':
-                # 返回代理服务说明页面
-                self.send_proxy_info()
-            else:
-                self.send_error(404, "Not Found")
-                
-        except Exception as e:
-            self.send_error(500, f"Proxy Error: {str(e)}")
+        if self.path.startswith('/proxy?'):
+            self.handle_proxy_request()
+        elif self.path == '/':
+            self.serve_proxy_info()
+        else:
+            self.send_error(404, "Not Found")
     
     def do_HEAD(self):
         """处理HEAD请求"""
-        try:
-            if self.path == '/':
-                self.send_response(200)
-                self.send_header('Content-Type', 'text/html; charset=utf-8')
-                self.send_header('Access-Control-Allow-Origin', '*')
-                self.end_headers()
-            else:
-                self.send_error(404, "Not Found")
-        except Exception as e:
-            self.send_error(500, f"HEAD Error: {str(e)}")
+        if self.path == '/':
+            self.send_cors_headers()
+            self.send_response(200)
+            self.send_header('Content-Type', 'text/html; charset=utf-8')
+            self.end_headers()
+        else:
+            self.send_error(404, "Not Found")
     
-    def proxy_request(self, target_url):
-        """代理请求到目标URL"""
+    def do_POST(self):
+        """处理POST请求"""
+        if self.path.startswith('/proxy'):
+            self.handle_proxy_request()
+        else:
+            self.send_error(404, "Not Found")
+    
+    def do_OPTIONS(self):
+        """处理OPTIONS请求（CORS预检）"""
+        self.send_cors_headers()
+        self.send_response(200)
+        self.end_headers()
+    
+    def handle_proxy_request(self):
+        """处理代理请求"""
         try:
-            # 创建请求
-            req = urllib.request.Request(target_url)
+            # 解析目标URL
+            parsed_path = urllib.parse.urlparse(self.path)
+            query_params = urllib.parse.parse_qs(parsed_path.query)
             
-            # 添加用户代理头，模拟真实浏览器
-            req.add_header('User-Agent', 
-                'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36')
-            req.add_header('Accept', 
-                'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8')
-            req.add_header('Accept-Language', 'zh-CN,zh;q=0.9,en;q=0.8')
-            req.add_header('Accept-Encoding', 'identity')  # 避免压缩
-            req.add_header('Connection', 'keep-alive')
+            if 'url' not in query_params:
+                self.send_error(400, "Missing 'url' parameter")
+                return
             
-            # 发送请求
-            with urllib.request.urlopen(req, timeout=10) as response:
-                # 读取响应内容
-                content = response.read()
-                
-                # 设置响应头
-                self.send_response(200)
-                
-                # 复制重要的响应头，但排除会阻止iframe的头
-                excluded_headers = {
-                    'x-frame-options',
-                    'content-security-policy',
-                    'content-encoding',
-                    'transfer-encoding',
-                    'connection'
-                }
-                
-                for header, value in response.headers.items():
-                    if header.lower() not in excluded_headers:
-                        self.send_header(header, value)
-                
-                # 添加CORS头
-                self.send_header('Access-Control-Allow-Origin', '*')
-                self.send_header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
-                self.send_header('Access-Control-Allow-Headers', '*')
-                
-                # 确保可以被iframe嵌入
-                self.send_header('X-Frame-Options', 'ALLOWALL')
-                
-                self.end_headers()
-                
-                # 如果是HTML内容，注入链接拦截JavaScript
-                if 'text/html' in response.headers.get('content-type', '').lower():
-                    content = self.inject_link_interception(content)
-                
-                # 发送内容
+            target_url = query_params['url'][0]
+            
+            # 验证URL格式
+            if not self.is_valid_url(target_url):
+                self.send_error(400, "Invalid URL format")
+                return
+            
+            # 获取目标网页内容
+            content, content_type = self.fetch_url(target_url)
+            
+            if content is None:
+                self.send_error(502, "Failed to fetch target URL")
+                return
+            
+            # 处理HTML内容，修复相对路径
+            if content_type and 'text/html' in content_type:
+                content = self.process_html_content(content, target_url)
+            
+            # 发送响应
+            self.send_cors_headers()
+            self.send_response(200)
+            self.send_header('Content-Type', content_type or 'text/html; charset=utf-8')
+            self.send_header('Content-Length', str(len(content)))
+            self.end_headers()
+            
+            if isinstance(content, str):
+                self.wfile.write(content.encode('utf-8'))
+            else:
                 self.wfile.write(content)
                 
-        except HTTPError as e:
-            self.send_error(e.code, f"HTTP Error: {e.reason}")
-        except URLError as e:
-            self.send_error(500, f"URL Error: {e.reason}")
         except Exception as e:
+            print(f"代理请求处理错误: {e}")
             self.send_error(500, f"Proxy Error: {str(e)}")
     
-    def inject_link_interception(self, content):
-        """在HTML内容中注入链接拦截JavaScript"""
+    def fetch_url(self, url):
+        """获取目标URL的内容"""
         try:
-            # 解码内容
-            if isinstance(content, bytes):
-                html_content = content.decode('utf-8', errors='ignore')
+            # 创建请求
+            request = urllib.request.Request(url)
+            
+            # 设置用户代理，模拟真实浏览器
+            request.add_header('User-Agent', 
+                'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36')
+            request.add_header('Accept', 
+                'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8')
+            request.add_header('Accept-Language', 'zh-CN,zh;q=0.9,en;q=0.8')
+            request.add_header('Accept-Encoding', 'gzip, deflate')
+            request.add_header('DNT', '1')
+            request.add_header('Connection', 'keep-alive')
+            request.add_header('Upgrade-Insecure-Requests', '1')
+            
+            # 发送请求
+            with urllib.request.urlopen(request, timeout=30) as response:
+                content_type = response.getheader('Content-Type', 'text/html')
+                content = response.read()
+                
+                # 如果是文本内容，尝试解码
+                if content_type and 'text/' in content_type:
+                    try:
+                        # 尝试不同的编码
+                        for encoding in ['utf-8', 'gbk', 'gb2312', 'big5']:
+                            try:
+                                decoded_content = content.decode(encoding)
+                                return decoded_content, content_type
+                            except UnicodeDecodeError:
+                                continue
+                        # 如果都失败，使用错误处理
+                        return content.decode('utf-8', errors='replace'), content_type
+                    except:
+                        return content.decode('utf-8', errors='replace'), content_type
+                
+                return content, content_type
+                
+        except urllib.error.HTTPError as e:
+            print(f"HTTP错误 {e.code}: {e.reason}")
+            return None, None
+        except urllib.error.URLError as e:
+            print(f"URL错误: {e.reason}")
+            return None, None
+        except socket.timeout:
+            print("请求超时")
+            return None, None
+        except Exception as e:
+            print(f"获取URL内容失败: {e}")
+            return None, None
+    
+    def process_html_content(self, content, base_url):
+        """处理HTML内容，修复相对路径并注入代理功能"""
+        try:
+            # 修复相对URL为绝对URL
+            content = self.fix_relative_urls(content, base_url)
+            
+            # 注入代理功能的JavaScript
+            proxy_script = f"""
+            <script>
+            // Web桌面系统代理功能
+            (function() {{
+                const originalOpen = XMLHttpRequest.prototype.open;
+                const originalFetch = window.fetch;
+                const baseUrl = '{base_url}';
+                const proxyUrl = 'http://localhost:9999/proxy?url=';
+                
+                // 拦截XMLHttpRequest
+                XMLHttpRequest.prototype.open = function(method, url, ...args) {{
+                    if (url && !url.startsWith('data:') && !url.startsWith('blob:')) {{
+                        url = makeAbsoluteUrl(url, baseUrl);
+                        if (!url.startsWith('http://localhost:9999')) {{
+                            url = proxyUrl + encodeURIComponent(url);
+                        }}
+                    }}
+                    return originalOpen.call(this, method, url, ...args);
+                }};
+                
+                // 拦截fetch
+                window.fetch = function(url, ...args) {{
+                    if (url && !url.startsWith('data:') && !url.startsWith('blob:')) {{
+                        url = makeAbsoluteUrl(url, baseUrl);
+                        if (!url.startsWith('http://localhost:9999')) {{
+                            url = proxyUrl + encodeURIComponent(url);
+                        }}
+                    }}
+                    return originalFetch.call(this, url, ...args);
+                }};
+                
+                // 工具函数：将相对URL转换为绝对URL
+                function makeAbsoluteUrl(url, base) {{
+                    if (url.startsWith('http') || url.startsWith('//')) {{
+                        return url;
+                    }}
+                    try {{
+                        return new URL(url, base).href;
+                    }} catch {{
+                        return url;
+                    }}
+                }}
+                
+                // 拦截链接点击，通过代理打开
+                document.addEventListener('click', function(e) {{
+                    const link = e.target.closest('a');
+                    if (link && link.href && !link.href.startsWith('javascript:') && !link.href.startsWith('#')) {{
+                        e.preventDefault();
+                        const absoluteUrl = makeAbsoluteUrl(link.href, baseUrl);
+                        if (window.parent && window.parent !== window) {{
+                            window.parent.postMessage({{
+                                type: 'navigate',
+                                url: absoluteUrl
+                            }}, '*');
+                        }} else {{
+                            window.location.href = proxyUrl + encodeURIComponent(absoluteUrl);
+                        }}
+                    }}
+                }}, true);
+                
+                // 拦截表单提交
+                document.addEventListener('submit', function(e) {{
+                    const form = e.target;
+                    if (form.action && !form.action.startsWith('javascript:')) {{
+                        const absoluteUrl = makeAbsoluteUrl(form.action, baseUrl);
+                        form.action = proxyUrl + encodeURIComponent(absoluteUrl);
+                    }}
+                }}, true);
+            }})();
+            </script>
+            """
+            
+            # 在</head>前插入代理脚本
+            if '</head>' in content:
+                content = content.replace('</head>', proxy_script + '</head>')
+            elif '<html>' in content:
+                content = content.replace('<html>', '<html>' + proxy_script)
             else:
-                html_content = content
+                content = proxy_script + content
             
-            # JavaScript代码用于拦截链接点击
-            injection_script = """
-<script>
-(function() {
-    'use strict';
-    
-    // 等待页面加载完成
-    function setupLinkInterception() {
-        // 拦截所有链接点击
-        document.addEventListener('click', function(event) {
-            const target = event.target.closest('a');
-            if (target && target.href) {
-                // 检查是否是外部链接或需要特殊处理的链接
-                const href = target.href;
-                
-                // 排除一些特殊情况
-                if (href.startsWith('javascript:') || 
-                    href.startsWith('mailto:') || 
-                    href.startsWith('tel:') ||
-                    href.startsWith('#')) {
-                    return; // 让这些链接正常工作
-                }
-                
-                // 阻止默认行为
-                event.preventDefault();
-                event.stopPropagation();
-                
-                // 通过postMessage发送给父窗口
-                try {
-                    window.parent.postMessage({
-                        type: 'linkClick',
-                        url: href,
-                        text: target.textContent || target.innerText || '',
-                        timestamp: Date.now()
-                    }, '*');
-                    
-                    console.log('发送链接点击消息:', href);
-                } catch (e) {
-                    console.error('发送链接点击消息失败:', e);
-                    // 如果postMessage失败，尝试直接导航
-                    window.location.href = href;
-                }
-            }
-        }, true);
-        
-        // 拦截表单提交（如搜索表单）
-        document.addEventListener('submit', function(event) {
-            const form = event.target;
-            if (form && form.action) {
-                event.preventDefault();
-                
-                // 构建表单提交URL
-                const formData = new FormData(form);
-                const params = new URLSearchParams(formData);
-                const method = form.method.toLowerCase();
-                
-                let submitUrl = form.action;
-                if (method === 'get' && params.toString()) {
-                    submitUrl += (submitUrl.includes('?') ? '&' : '?') + params.toString();
-                }
-                
-                // 发送给父窗口
-                try {
-                    window.parent.postMessage({
-                        type: 'linkClick',
-                        url: submitUrl,
-                        text: 'Form Submit',
-                        timestamp: Date.now()
-                    }, '*');
-                    
-                    console.log('发送表单提交消息:', submitUrl);
-                } catch (e) {
-                    console.error('发送表单提交消息失败:', e);
-                    window.location.href = submitUrl;
-                }
-            }
-        }, true);
-    }
-    
-    // 如果页面已加载完成，立即设置
-    if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', setupLinkInterception);
-    } else {
-        setupLinkInterception();
-    }
-    
-    // 监听动态内容变化
-    if (window.MutationObserver) {
-        const observer = new MutationObserver(function(mutations) {
-            mutations.forEach(function(mutation) {
-                if (mutation.type === 'childList' && mutation.addedNodes.length > 0) {
-                    // 新增节点可能包含链接，重新设置拦截
-                    setupLinkInterception();
-                }
-            });
-        });
-        
-        observer.observe(document.body || document.documentElement, {
-            childList: true,
-            subtree: true
-        });
-    }
-})();
-</script>
-"""
-            
-            # 尝试在</head>之前插入，如果没有head标签则在<body>之前插入
-            if '</head>' in html_content:
-                html_content = html_content.replace('</head>', injection_script + '\n</head>')
-            elif '<body>' in html_content:
-                html_content = html_content.replace('<body>', injection_script + '\n<body>')
-            elif '<html>' in html_content:
-                html_content = html_content.replace('<html>', '<html>' + injection_script)
-            else:
-                # 如果都没有，直接在开头添加
-                html_content = injection_script + '\n' + html_content
-            
-            return html_content.encode('utf-8')
+            return content
             
         except Exception as e:
-            print(f"链接拦截脚本注入失败: {e}")
+            print(f"处理HTML内容失败: {e}")
             return content
     
-    def send_proxy_info(self):
-        """发送代理服务说明页面"""
-        html_content = """
-<!DOCTYPE html>
-<html lang="zh-CN">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>WebOS 代理服务器</title>
-    <style>
-        body {
-            font-family: 'Microsoft YaHei', Arial, sans-serif;
-            line-height: 1.6;
-            margin: 0;
-            padding: 20px;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            min-height: 100vh;
-        }
-        .container {
-            max-width: 800px;
-            margin: 0 auto;
-            background: rgba(255, 255, 255, 0.1);
-            backdrop-filter: blur(10px);
-            border-radius: 15px;
-            padding: 30px;
-            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
-        }
-        h1 {
-            text-align: center;
-            margin-bottom: 30px;
-            font-size: 2.5em;
-        }
-        .status {
-            background: rgba(40, 167, 69, 0.2);
-            border: 2px solid #28a745;
-            border-radius: 10px;
-            padding: 20px;
-            margin: 20px 0;
-            text-align: center;
-        }
-        .usage {
-            background: rgba(23, 162, 184, 0.2);
-            border: 2px solid #17a2b8;
-            border-radius: 10px;
-            padding: 20px;
-            margin: 20px 0;
-        }
-        code {
-            background: rgba(0, 0, 0, 0.3);
-            padding: 4px 8px;
-            border-radius: 4px;
-            font-family: monospace;
-        }
-        .test-links {
-            text-align: center;
-            margin: 30px 0;
-        }
-        .test-link {
-            background: rgba(255, 255, 255, 0.2);
-            color: white;
-            text-decoration: none;
-            padding: 12px 24px;
-            border-radius: 25px;
-            margin: 10px;
-            display: inline-block;
-            transition: all 0.3s;
-        }
-        .test-link:hover {
-            background: rgba(255, 255, 255, 0.3);
-            transform: translateY(-2px);
-        }
-    </style>
-</head>
-<body>
-    <div class="container">
-        <h1>🔄 WebOS 代理服务器</h1>
-        
-        <div class="status">
-            <h2>✅ 代理服务已启动</h2>
-            <p>专门用于绕过X-Frame-Options限制，让WebOS浏览器能够访问百度等网站。</p>
-        </div>
-
-        <div class="usage">
-            <h3>📖 使用说明</h3>
-            <p><strong>代理URL格式：</strong></p>
-            <p><code>http://localhost:PORT/proxy?url=目标网址</code></p>
+    def fix_relative_urls(self, content, base_url):
+        """修复HTML中的相对URL"""
+        try:
+            parsed_base = urlparse(base_url)
+            base_domain = f"{parsed_base.scheme}://{parsed_base.netloc}"
             
-            <p><strong>示例：</strong></p>
-            <ul>
-                <li><code>/proxy?url=https://www.baidu.com</code></li>
-                <li><code>/proxy?url=https://www.google.com</code></li>
-                <li><code>/proxy?url=www.zhihu.com</code></li>
-            </ul>
+            # 修复各种资源的相对路径
+            patterns = [
+                (r'href="(?!http|//|#|javascript:)([^"]*)"', 'href'),
+                (r"href='(?!http|//|#|javascript:)([^']*)'", 'href'),
+                (r'src="(?!http|//|data:|javascript:)([^"]*)"', 'src'),
+                (r"src='(?!http|//|data:|javascript:)([^']*)'", 'src'),
+                (r'action="(?!http|//|#|javascript:)([^"]*)"', 'action'),
+                (r"action='(?!http|//|#|javascript:)([^']*)'", 'action'),
+            ]
             
-            <p><strong>功能特性：</strong></p>
-            <ul>
-                <li>🔓 移除X-Frame-Options限制</li>
-                <li>🌐 支持HTTPS网站代理</li>
-                <li>🛡️ 保持网站原始功能</li>
-                <li>⚡ 快速响应和加载</li>
-            </ul>
-        </div>
-
-        <div class="test-links">
-            <h3>🧪 测试链接</h3>
-            <a href="/proxy?url=https://www.baidu.com" class="test-link" target="_blank">百度首页</a>
-            <a href="/proxy?url=https://www.google.com" class="test-link" target="_blank">Google</a>
-            <a href="/proxy?url=https://www.zhihu.com" class="test-link" target="_blank">知乎</a>
-        </div>
-
-        <p style="text-align: center; margin-top: 40px;">
-            🚀 现在可以在WebOS浏览器中使用代理URL访问任何网站！
-        </p>
-    </div>
-</body>
-</html>
+            for pattern, attr in patterns:
+                def replace_func(match):
+                    relative_url = match.group(1)
+                    if relative_url.startswith('/'):
+                        absolute_url = base_domain + relative_url
+                    else:
+                        absolute_url = urljoin(base_url, relative_url)
+                    return f'{attr}="{absolute_url}"'
+                
+                content = re.sub(pattern, replace_func, content)
+            
+            return content
+            
+        except Exception as e:
+            print(f"修复相对URL失败: {e}")
+            return content
+    
+    def is_valid_url(self, url):
+        """验证URL格式"""
+        try:
+            result = urlparse(url)
+            return all([result.scheme, result.netloc])
+        except:
+            return False
+    
+    def send_cors_headers(self):
+        """发送CORS头部"""
+        self.send_header('Access-Control-Allow-Origin', '*')
+        self.send_header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS')
+        self.send_header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With')
+        self.send_header('Access-Control-Max-Age', '86400')
+    
+    def serve_proxy_info(self):
+        """提供代理服务器信息页面"""
+        info_html = """
+        <!DOCTYPE html>
+        <html lang="zh-CN">
+        <head>
+            <meta charset="UTF-8">
+            <title>Web桌面系统代理服务器</title>
+            <style>
+                body { font-family: Arial, sans-serif; margin: 50px; }
+                .container { max-width: 600px; margin: 0 auto; }
+                .status { color: #28a745; font-weight: bold; }
+                code { background: #f4f4f4; padding: 2px 5px; border-radius: 3px; }
+            </style>
+        </head>
+        <body>
+            <div class="container">
+                <h1>Web桌面系统代理服务器</h1>
+                <p class="status">✅ 代理服务器运行正常</p>
+                <h2>使用方法</h2>
+                <p>通过以下URL格式访问代理内容：</p>
+                <code>http://localhost:9999/proxy?url=目标网址</code>
+                <h2>功能特性</h2>
+                <ul>
+                    <li>✅ 解决CORS跨域问题</li>
+                    <li>✅ 修复相对路径链接</li>
+                    <li>✅ 支持多种字符编码</li>
+                    <li>✅ 自动处理链接跳转</li>
+                    <li>✅ 表单提交代理</li>
+                </ul>
+            </div>
+        </body>
+        </html>
         """
         
+        self.send_cors_headers()
         self.send_response(200)
         self.send_header('Content-Type', 'text/html; charset=utf-8')
-        self.send_header('Access-Control-Allow-Origin', '*')
         self.end_headers()
-        self.wfile.write(html_content.encode('utf-8'))
+        self.wfile.write(info_html.encode('utf-8'))
     
     def log_message(self, format, *args):
         """自定义日志格式"""
-        print(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] {format % args}")
+        print(f"[代理服务器] {format % args}")
 
-def find_free_port(start_port=9000, max_attempts=100):
-    """查找可用端口"""
-    import socket
-    
-    for port in range(start_port, start_port + max_attempts):
-        try:
-            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-                s.bind(('localhost', port))
-                return port
-        except OSError:
-            continue
-    
-    raise RuntimeError(f"无法在端口 {start_port}-{start_port + max_attempts} 范围内找到可用端口")
-
-def main():
-    """主函数"""
-    print("╔══════════════════════════════════════════════╗")
-    print("║           WebOS 代理服务器                   ║")
-    print("║        绕过X-Frame-Options限制               ║")
-    print("╚══════════════════════════════════════════════╝")
-    print()
-    
-    # 解析命令行参数
-    port = 9000
-    if len(sys.argv) > 1:
-        try:
-            port = int(sys.argv[1])
-        except ValueError:
-            print("❌ 无效的端口号")
-            sys.exit(1)
-    
-    # 查找可用端口
+def start_proxy_server(port=9999):
+    """启动代理服务器"""
     try:
-        port = find_free_port(port)
-    except Exception as e:
-        print(f"❌ 无法找到可用端口: {e}")
-        sys.exit(1)
-    
-    # 启动代理服务器
-    try:
-        with socketserver.TCPServer(("localhost", port), ProxyRequestHandler) as httpd:
-            print(f"🚀 代理服务器已启动！")
-            print("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-            print(f"📍 代理地址: http://localhost:{port}")
-            print(f"🌐 百度代理: http://localhost:{port}/proxy?url=https://www.baidu.com")
-            print(f"📁 目录: {sys.path[0] if sys.path[0] else '当前目录'}")
-            print("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-            print()
-            print("💡 使用说明:")
-            print("   • 在WebOS浏览器地址栏输入代理URL")
-            print("   • 格式: http://localhost:" + str(port) + "/proxy?url=目标网址")
-            print("   • 现在可以访问百度、Google等被限制的网站")
-            print("   • 按 Ctrl+C 停止服务器")
-            print()
-            print("⚡ 代理服务运行中...")
-            
+        with socketserver.TCPServer(("", port), ProxyHandler) as httpd:
+            print(f"🚀 Web桌面系统代理服务器启动成功!")
+            print(f"📡 监听端口: {port}")
+            print(f"🌐 访问地址: http://localhost:{port}")
+            print(f"📋 使用方法: http://localhost:{port}/proxy?url=目标网址")
+            print("=" * 50)
             httpd.serve_forever()
-            
     except KeyboardInterrupt:
-        print("\n\n🛑 代理服务器已停止")
-        print("👋 感谢使用 WebOS 代理服务!")
+        print("\n代理服务器已停止")
     except Exception as e:
-        print(f"❌ 服务器错误: {e}")
-        sys.exit(1)
+        print(f"启动代理服务器失败: {e}")
 
 if __name__ == "__main__":
-    main() 
+    start_proxy_server(9999) 

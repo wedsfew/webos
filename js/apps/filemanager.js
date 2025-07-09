@@ -1,456 +1,364 @@
 // 文件管理器应用
-class FileManager extends Application {
-    constructor() {
-        super('文件管理器', 'fas fa-folder');
-        
+class FileManagerApp {
+    constructor(windowId) {
+        this.windowId = windowId;
         this.currentPath = '/';
-        this.selectedItems = new Set();
-        this.fileSystem = this.createVirtualFileSystem();
+        this.files = this.generateSampleFiles();
+        this.selectedFiles = new Set();
+        this.init();
     }
-
-    createVirtualFileSystem() {
-        return {
-            '/': {
-                type: 'directory',
-                children: {
-                    'Documents': {
-                        type: 'directory',
-                        children: {
-                            'README.txt': {
-                                type: 'file',
-                                size: 1024,
-                                content: '欢迎使用 WebOS Desktop！\n\n这是一个基于Web的桌面系统，您可以：\n- 使用文件管理器浏览文件\n- 打开文本编辑器编辑文档\n- 使用计算器进行计算\n- 打开终端执行命令\n- 通过设置自定义系统\n\n所有功能都在浏览器中运行，无需安装任何软件。'
-                            },
-                            'Notes.md': {
-                                type: 'file',
-                                size: 512,
-                                content: '# 我的笔记\n\n## 待办事项\n- [ ] 学习 WebOS Desktop\n- [ ] 创建新项目\n- [ ] 整理文档\n\n## 想法\n- 这个桌面系统很有趣\n- 可以在浏览器中模拟完整的操作系统体验'
-                            }
-                        }
-                    },
-                    'Pictures': {
-                        type: 'directory',
-                        children: {
-                            'wallpaper.jpg': {
-                                type: 'file',
-                                size: 2048000,
-                                content: 'binary'
-                            }
-                        }
-                    },
-                    'Downloads': {
-                        type: 'directory',
-                        children: {}
-                    },
-                    'Desktop': {
-                        type: 'directory',
-                        children: {
-                            'shortcut.lnk': {
-                                type: 'file',
-                                size: 256,
-                                content: 'link'
-                            }
-                        }
-                    }
-                }
-            }
-        };
+    
+    init() {
+        const content = WindowManager.getWindowContent(this.windowId);
+        content.innerHTML = this.getHTML();
+        this.setupEvents();
+        this.updateFileList();
     }
-
-    render() {
+    
+    getHTML() {
         return `
-            <div class="file-manager">
-                <div class="file-manager-toolbar">
-                    <button id="back-btn" title="后退">
+            <div class="filemanager-app">
+                <div class="fm-toolbar">
+                    <button class="fm-button" id="back-btn" title="后退">
                         <i class="fas fa-arrow-left"></i>
                     </button>
-                    <button id="forward-btn" title="前进">
-                        <i class="fas fa-arrow-right"></i>
-                    </button>
-                    <button id="up-btn" title="上一级">
+                    <button class="fm-button" id="up-btn" title="上级目录">
                         <i class="fas fa-arrow-up"></i>
                     </button>
-                    <input type="text" class="file-path" id="path-input" value="${this.currentPath}" readonly>
-                    <button id="refresh-btn" title="刷新">
+                    <button class="fm-button" id="refresh-btn" title="刷新">
                         <i class="fas fa-sync"></i>
                     </button>
-                    <button id="new-folder-btn" title="新建文件夹">
+                    <div class="fm-path" id="current-path">/</div>
+                    <button class="fm-button" id="new-folder-btn" title="新建文件夹">
                         <i class="fas fa-folder-plus"></i>
                     </button>
+                    <button class="fm-button" id="view-toggle-btn" title="切换视图">
+                        <i class="fas fa-th"></i>
+                    </button>
                 </div>
-                <div class="file-list" id="file-list">
-                    ${this.renderFileList()}
+                <div class="fm-content">
+                    <div class="file-list" id="file-list">
+                        <!-- 文件列表将在这里动态生成 -->
+                    </div>
                 </div>
             </div>
         `;
     }
-
-    renderFileList() {
-        const currentDir = this.getCurrentDirectory();
-        if (!currentDir || !currentDir.children) {
-            return '<div class="empty-folder">此文件夹为空</div>';
-        }
-
-        let html = '';
+    
+    setupEvents() {
+        const content = WindowManager.getWindowContent(this.windowId);
         
-        // 如果不在根目录，添加"返回上级"项
-        if (this.currentPath !== '/') {
-            html += `
-                <div class="file-item" data-name=".." data-type="directory">
-                    <i class="file-icon fas fa-level-up-alt"></i>
-                    <span class="file-name">..</span>
-                    <span class="file-size"></span>
+        // 工具栏按钮事件
+        content.querySelector('#back-btn').addEventListener('click', () => this.goBack());
+        content.querySelector('#up-btn').addEventListener('click', () => this.goUp());
+        content.querySelector('#refresh-btn').addEventListener('click', () => this.refresh());
+        content.querySelector('#new-folder-btn').addEventListener('click', () => this.createNewFolder());
+        content.querySelector('#view-toggle-btn').addEventListener('click', () => this.toggleView());
+        
+        // 文件列表事件
+        const fileList = content.querySelector('#file-list');
+        fileList.addEventListener('click', (e) => this.handleFileClick(e));
+        fileList.addEventListener('dblclick', (e) => this.handleFileDoubleClick(e));
+        
+        // 右键菜单
+        fileList.addEventListener('contextmenu', (e) => this.showContextMenu(e));
+        
+        // 键盘事件
+        document.addEventListener('keydown', (e) => this.handleKeyboard(e));
+    }
+    
+    generateSampleFiles() {
+        return {
+            '/': [
+                { name: '文档', type: 'folder', size: null, modified: '2024-01-15' },
+                { name: '图片', type: 'folder', size: null, modified: '2024-01-14' },
+                { name: '音乐', type: 'folder', size: null, modified: '2024-01-13' },
+                { name: '视频', type: 'folder', size: null, modified: '2024-01-12' },
+                { name: '下载', type: 'folder', size: null, modified: '2024-01-11' },
+                { name: 'readme.txt', type: 'file', size: '1.2 KB', modified: '2024-01-10' },
+                { name: 'config.json', type: 'file', size: '856 B', modified: '2024-01-09' }
+            ],
+            '/文档': [
+                { name: '..', type: 'parent', size: null, modified: null },
+                { name: '工作文档', type: 'folder', size: null, modified: '2024-01-15' },
+                { name: '个人笔记', type: 'folder', size: null, modified: '2024-01-14' },
+                { name: '会议记录.docx', type: 'file', size: '245 KB', modified: '2024-01-15' },
+                { name: '项目计划.pdf', type: 'file', size: '1.8 MB', modified: '2024-01-14' },
+                { name: '演示文稿.pptx', type: 'file', size: '3.2 MB', modified: '2024-01-13' }
+            ],
+            '/图片': [
+                { name: '..', type: 'parent', size: null, modified: null },
+                { name: '照片', type: 'folder', size: null, modified: '2024-01-14' },
+                { name: '截图', type: 'folder', size: null, modified: '2024-01-13' },
+                { name: '头像.jpg', type: 'file', size: '156 KB', modified: '2024-01-14' },
+                { name: '壁纸.png', type: 'file', size: '2.3 MB', modified: '2024-01-13' },
+                { name: 'logo.svg', type: 'file', size: '45 KB', modified: '2024-01-12' }
+            ],
+            '/音乐': [
+                { name: '..', type: 'parent', size: null, modified: null },
+                { name: '流行音乐', type: 'folder', size: null, modified: '2024-01-13' },
+                { name: '古典音乐', type: 'folder', size: null, modified: '2024-01-12' },
+                { name: '歌曲1.mp3', type: 'file', size: '4.2 MB', modified: '2024-01-13' },
+                { name: '歌曲2.flac', type: 'file', size: '28.5 MB', modified: '2024-01-12' }
+            ]
+        };
+    }
+    
+    updateFileList() {
+        const content = WindowManager.getWindowContent(this.windowId);
+        const fileList = content.querySelector('#file-list');
+        const pathElement = content.querySelector('#current-path');
+        
+        pathElement.textContent = this.currentPath;
+        
+        const files = this.files[this.currentPath] || [];
+        
+        fileList.innerHTML = files.map(file => {
+            const selectedClass = this.selectedFiles.has(file.name) ? 'selected' : '';
+            const icon = this.getFileIcon(file);
+            const sizeText = file.size ? `<div class="file-size">${file.size}</div>` : '';
+            const modifiedText = file.modified ? `<div class="file-modified">${file.modified}</div>` : '';
+            
+            return `
+                <div class="file-item ${selectedClass}" data-name="${file.name}" data-type="${file.type}">
+                    <div class="file-icon">${icon}</div>
+                    <div class="file-name">${file.name}</div>
+                    ${sizeText}
+                    ${modifiedText}
                 </div>
             `;
-        }
-
-        // 先显示文件夹
-        for (const [name, item] of Object.entries(currentDir.children)) {
-            if (item.type === 'directory') {
-                html += this.renderFileItem(name, item);
-            }
-        }
-
-        // 再显示文件
-        for (const [name, item] of Object.entries(currentDir.children)) {
-            if (item.type === 'file') {
-                html += this.renderFileItem(name, item);
-            }
-        }
-
-        return html || '<div class="empty-folder">此文件夹为空</div>';
+        }).join('');
     }
-
-    renderFileItem(name, item) {
-        const icon = this.getFileIcon(name, item.type);
-        const size = item.type === 'file' ? this.formatFileSize(item.size) : '';
-        
-        return `
-            <div class="file-item" data-name="${name}" data-type="${item.type}">
-                <i class="file-icon ${icon}"></i>
-                <span class="file-name">${name}</span>
-                <span class="file-size">${size}</span>
-            </div>
-        `;
-    }
-
-    getFileIcon(name, type) {
-        if (type === 'directory') {
-            return 'fas fa-folder';
-        }
-
-        const ext = name.split('.').pop().toLowerCase();
+    
+    getFileIcon(file) {
         const iconMap = {
-            'txt': 'fas fa-file-text',
-            'md': 'fab fa-markdown',
-            'jpg': 'fas fa-file-image',
-            'jpeg': 'fas fa-file-image',
-            'png': 'fas fa-file-image',
-            'gif': 'fas fa-file-image',
-            'pdf': 'fas fa-file-pdf',
-            'doc': 'fas fa-file-word',
-            'docx': 'fas fa-file-word',
-            'xls': 'fas fa-file-excel',
-            'xlsx': 'fas fa-file-excel',
-            'lnk': 'fas fa-link'
+            'folder': '<i class="fas fa-folder" style="color: #ffc107;"></i>',
+            'parent': '<i class="fas fa-level-up-alt" style="color: #6c757d;"></i>',
+            'txt': '<i class="fas fa-file-alt" style="color: #17a2b8;"></i>',
+            'doc': '<i class="fas fa-file-word" style="color: #2b579a;"></i>',
+            'docx': '<i class="fas fa-file-word" style="color: #2b579a;"></i>',
+            'pdf': '<i class="fas fa-file-pdf" style="color: #dc3545;"></i>',
+            'ppt': '<i class="fas fa-file-powerpoint" style="color: #d04423;"></i>',
+            'pptx': '<i class="fas fa-file-powerpoint" style="color: #d04423;"></i>',
+            'jpg': '<i class="fas fa-file-image" style="color: #28a745;"></i>',
+            'jpeg': '<i class="fas fa-file-image" style="color: #28a745;"></i>',
+            'png': '<i class="fas fa-file-image" style="color: #28a745;"></i>',
+            'svg': '<i class="fas fa-file-image" style="color: #28a745;"></i>',
+            'mp3': '<i class="fas fa-file-audio" style="color: #6f42c1;"></i>',
+            'flac': '<i class="fas fa-file-audio" style="color: #6f42c1;"></i>',
+            'mp4': '<i class="fas fa-file-video" style="color: #fd7e14;"></i>',
+            'json': '<i class="fas fa-file-code" style="color: #20c997;"></i>'
         };
-
-        return iconMap[ext] || 'fas fa-file';
-    }
-
-    formatFileSize(bytes) {
-        if (bytes === 0) return '0 B';
-        const k = 1024;
-        const sizes = ['B', 'KB', 'MB', 'GB'];
-        const i = Math.floor(Math.log(bytes) / Math.log(k));
-        return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
-    }
-
-    getCurrentDirectory() {
-        const parts = this.currentPath.split('/').filter(part => part);
-        let current = this.fileSystem['/'];
         
-        for (const part of parts) {
-            if (current.children && current.children[part]) {
-                current = current.children[part];
-            } else {
-                return null;
-            }
+        if (file.type === 'folder' || file.type === 'parent') {
+            return iconMap[file.type];
         }
         
-        return current;
+        const extension = file.name.split('.').pop().toLowerCase();
+        return iconMap[extension] || '<i class="fas fa-file" style="color: #6c757d;"></i>';
     }
-
-    onMount() {
-        this.setupEventListeners();
-    }
-
-    setupEventListeners() {
-        const window = document.querySelector(`[data-window-id="${this.windowId}"]`);
+    
+    handleFileClick(e) {
+        const fileItem = e.target.closest('.file-item');
+        if (!fileItem) return;
         
-        // 工具栏按钮
-        window.querySelector('#back-btn').addEventListener('click', () => this.goBack());
-        window.querySelector('#up-btn').addEventListener('click', () => this.goUp());
-        window.querySelector('#refresh-btn').addEventListener('click', () => this.refresh());
-        window.querySelector('#new-folder-btn').addEventListener('click', () => this.createNewFolder());
-
-        // 文件列表事件
-        const fileList = window.querySelector('#file-list');
+        const fileName = fileItem.dataset.name;
         
-        fileList.addEventListener('click', (e) => {
-            const fileItem = e.target.closest('.file-item');
-            if (!fileItem) return;
-
-            this.selectItem(fileItem);
-        });
-
-        fileList.addEventListener('dblclick', (e) => {
-            const fileItem = e.target.closest('.file-item');
-            if (!fileItem) return;
-
-            this.openItem(fileItem);
-        });
-
-        // 右键菜单
-        fileList.addEventListener('contextmenu', (e) => {
-            e.preventDefault();
-            const fileItem = e.target.closest('.file-item');
-            this.showContextMenu(e.clientX, e.clientY, fileItem);
-        });
-    }
-
-    selectItem(fileItem) {
-        // 清除其他选中状态
-        const window = document.querySelector(`[data-window-id="${this.windowId}"]`);
-        window.querySelectorAll('.file-item.selected').forEach(item => {
+        // 清除其他选择
+        this.selectedFiles.clear();
+        document.querySelectorAll('.file-item.selected').forEach(item => {
             item.classList.remove('selected');
         });
-
-        // 选中当前项
+        
+        // 选择当前文件
+        this.selectedFiles.add(fileName);
         fileItem.classList.add('selected');
-        this.selectedItems.clear();
-        this.selectedItems.add(fileItem.dataset.name);
     }
-
-    openItem(fileItem) {
-        const name = fileItem.dataset.name;
-        const type = fileItem.dataset.type;
-
-        if (name === '..') {
+    
+    handleFileDoubleClick(e) {
+        const fileItem = e.target.closest('.file-item');
+        if (!fileItem) return;
+        
+        const fileName = fileItem.dataset.name;
+        const fileType = fileItem.dataset.type;
+        
+        if (fileType === 'folder') {
+            this.openFolder(fileName);
+        } else if (fileType === 'parent') {
             this.goUp();
-            return;
-        }
-
-        if (type === 'directory') {
-            this.navigateToPath(this.joinPath(this.currentPath, name));
         } else {
-            this.openFile(name);
+            this.openFile(fileName);
         }
     }
-
+    
+    openFolder(folderName) {
+        const newPath = this.currentPath === '/' ? `/${folderName}` : `${this.currentPath}/${folderName}`;
+        
+        if (this.files[newPath]) {
+            this.currentPath = newPath;
+            this.selectedFiles.clear();
+            this.updateFileList();
+        } else {
+            Desktop.showNotification(`文件夹 "${folderName}" 不存在`, 'error');
+        }
+    }
+    
     openFile(fileName) {
-        const file = this.getFileByPath(this.joinPath(this.currentPath, fileName));
-        if (!file) return;
-
-        const ext = fileName.split('.').pop().toLowerCase();
+        const extension = fileName.split('.').pop().toLowerCase();
         
-        if (['txt', 'md'].includes(ext)) {
-            // 用文本编辑器打开
-            const textEditor = new TextEditor();
-            const windowId = desktop.windowManager.createWindow(textEditor);
-            textEditor.windowId = windowId;
-            desktop.runningApps.set('texteditor-' + Date.now(), textEditor);
-            desktop.addToTaskbar('texteditor-' + Date.now(), textEditor);
-            
-            // 加载文件内容
-            setTimeout(() => {
-                const editorWindow = document.querySelector(`[data-window-id="${windowId}"]`);
-                const textarea = editorWindow.querySelector('.text-editor-content');
-                if (textarea) {
-                    textarea.value = file.content;
-                }
-            }, 100);
+        if (['txt', 'json', 'js', 'css', 'html'].includes(extension)) {
+            // 打开文本编辑器
+            Desktop.launchApp('texteditor');
+            Desktop.showNotification(`正在打开文件: ${fileName}`, 'info');
+        } else if (['jpg', 'jpeg', 'png', 'gif', 'svg'].includes(extension)) {
+            // 显示图片
+            this.showImageViewer(fileName);
         } else {
-            alert(`无法打开文件: ${fileName}\n文件类型: ${ext}`);
+            Desktop.showNotification(`无法打开文件类型: ${extension}`, 'error');
         }
     }
-
-    getFileByPath(path) {
-        const parts = path.split('/').filter(part => part);
-        let current = this.fileSystem['/'];
+    
+    showImageViewer(fileName) {
+        const modal = Desktop.createModal({
+            title: `图片查看器 - ${fileName}`,
+            content: `
+                <div style="text-align: center; padding: 20px;">
+                    <div style="background: #f5f5f5; padding: 40px; border-radius: 8px;">
+                        <i class="fas fa-image" style="font-size: 64px; color: #ccc;"></i>
+                        <p style="margin-top: 20px; color: #666;">图片预览功能</p>
+                        <p style="font-size: 12px; color: #999;">文件: ${fileName}</p>
+                    </div>
+                </div>
+            `,
+            buttons: [
+                {
+                    text: '关闭',
+                    onClick: () => Desktop.closeModal()
+                }
+            ]
+        });
         
-        for (const part of parts) {
-            if (current.children && current.children[part]) {
-                current = current.children[part];
-            } else {
-                return null;
-            }
-        }
-        
-        return current;
+        document.body.appendChild(modal);
     }
-
-    navigateToPath(path) {
-        const dir = this.getFileByPath(path);
-        if (dir && dir.type === 'directory') {
-            this.currentPath = path;
-            this.refresh();
-        }
-    }
-
+    
     goBack() {
-        // 简单的后退功能
+        // 简单的后退功能，这里可以实现更复杂的历史记录
         this.goUp();
     }
-
+    
     goUp() {
-        if (this.currentPath === '/') return;
-        
-        const parts = this.currentPath.split('/').filter(part => part);
-        parts.pop();
-        this.currentPath = '/' + parts.join('/');
-        if (this.currentPath !== '/' && this.currentPath.endsWith('/')) {
-            this.currentPath = this.currentPath.slice(0, -1);
+        if (this.currentPath !== '/') {
+            const parentPath = this.currentPath.substring(0, this.currentPath.lastIndexOf('/')) || '/';
+            this.currentPath = parentPath;
+            this.selectedFiles.clear();
+            this.updateFileList();
         }
-        this.refresh();
     }
-
+    
     refresh() {
-        const window = document.querySelector(`[data-window-id="${this.windowId}"]`);
-        const fileList = window.querySelector('#file-list');
-        const pathInput = window.querySelector('#path-input');
-        
-        pathInput.value = this.currentPath;
-        fileList.innerHTML = this.renderFileList();
-        
-        // 重新绑定事件
-        this.setupFileListEvents(fileList);
+        this.updateFileList();
+        Desktop.showNotification('文件列表已刷新', 'success');
     }
-
-    setupFileListEvents(fileList) {
-        fileList.addEventListener('click', (e) => {
-            const fileItem = e.target.closest('.file-item');
-            if (!fileItem) return;
-            this.selectItem(fileItem);
-        });
-
-        fileList.addEventListener('dblclick', (e) => {
-            const fileItem = e.target.closest('.file-item');
-            if (!fileItem) return;
-            this.openItem(fileItem);
-        });
-    }
-
+    
     createNewFolder() {
-        const name = prompt('请输入文件夹名称:', '新建文件夹');
-        if (!name) return;
-
-        const currentDir = this.getCurrentDirectory();
-        if (currentDir && currentDir.children) {
-            if (currentDir.children[name]) {
-                alert('文件夹已存在！');
-                return;
+        const folderName = prompt('请输入文件夹名称:', '新建文件夹');
+        if (folderName && folderName.trim()) {
+            if (!this.files[this.currentPath]) {
+                this.files[this.currentPath] = [];
             }
             
-            currentDir.children[name] = {
-                type: 'directory',
-                children: {}
-            };
+            this.files[this.currentPath].push({
+                name: folderName.trim(),
+                type: 'folder',
+                size: null,
+                modified: new Date().toISOString().split('T')[0]
+            });
             
-            this.refresh();
+            this.updateFileList();
+            Desktop.showNotification(`已创建文件夹: ${folderName}`, 'success');
         }
     }
-
-    joinPath(basePath, name) {
-        if (basePath === '/') {
-            return '/' + name;
+    
+    toggleView() {
+        const content = WindowManager.getWindowContent(this.windowId);
+        const fileList = content.querySelector('#file-list');
+        const viewButton = content.querySelector('#view-toggle-btn i');
+        
+        if (fileList.classList.contains('list-view')) {
+            fileList.classList.remove('list-view');
+            viewButton.className = 'fas fa-list';
+        } else {
+            fileList.classList.add('list-view');
+            viewButton.className = 'fas fa-th';
         }
-        return basePath + '/' + name;
     }
-
-    showContextMenu(x, y, fileItem) {
-        const existingMenu = document.querySelector('.file-context-menu');
-        if (existingMenu) {
-            existingMenu.remove();
+    
+    showContextMenu(e) {
+        e.preventDefault();
+        // 这里可以实现右键菜单功能
+        Desktop.showNotification('右键菜单功能', 'info');
+    }
+    
+    handleKeyboard(e) {
+        if (WindowManager.getActiveWindow() !== this.windowId) return;
+        
+        if (e.key === 'Delete' && this.selectedFiles.size > 0) {
+            this.deleteSelectedFiles();
+        } else if (e.key === 'F2' && this.selectedFiles.size === 1) {
+            this.renameSelectedFile();
+        } else if (e.ctrlKey && e.key === 'a') {
+            e.preventDefault();
+            this.selectAllFiles();
         }
-
-        const contextMenu = document.createElement('div');
-        contextMenu.className = 'file-context-menu';
-        contextMenu.style.cssText = `
-            position: fixed;
-            top: ${y}px;
-            left: ${x}px;
-            background: rgba(255, 255, 255, 0.95);
-            backdrop-filter: blur(20px);
-            border: 1px solid rgba(0, 0, 0, 0.1);
-            border-radius: 8px;
-            padding: 8px 0;
-            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
-            z-index: 10000;
-            min-width: 150px;
-        `;
-
-        const menuItems = fileItem ? [
-            { text: '打开', action: () => this.openItem(fileItem) },
-            { text: '重命名', action: () => this.renameItem(fileItem) },
-            { text: '删除', action: () => this.deleteItem(fileItem) }
-        ] : [
-            { text: '新建文件夹', action: () => this.createNewFolder() },
-            { text: '刷新', action: () => this.refresh() }
-        ];
-
-        menuItems.forEach(item => {
-            const menuItem = document.createElement('div');
-            menuItem.textContent = item.text;
-            menuItem.style.cssText = `
-                padding: 8px 16px;
-                cursor: pointer;
-                transition: background 0.2s ease;
-            `;
-            menuItem.addEventListener('mouseover', () => {
-                menuItem.style.background = 'rgba(0, 123, 255, 0.1)';
-            });
-            menuItem.addEventListener('mouseout', () => {
-                menuItem.style.background = 'transparent';
-            });
-            menuItem.addEventListener('click', () => {
-                item.action();
-                contextMenu.remove();
-            });
-            contextMenu.appendChild(menuItem);
+    }
+    
+    deleteSelectedFiles() {
+        if (this.selectedFiles.size === 0) return;
+        
+        const files = Array.from(this.selectedFiles);
+        const confirm = window.confirm(`确定要删除 ${files.length} 个文件吗？`);
+        
+        if (confirm) {
+            const currentFiles = this.files[this.currentPath] || [];
+            this.files[this.currentPath] = currentFiles.filter(file => !this.selectedFiles.has(file.name));
+            this.selectedFiles.clear();
+            this.updateFileList();
+            Desktop.showNotification(`已删除 ${files.length} 个文件`, 'success');
+        }
+    }
+    
+    renameSelectedFile() {
+        const fileName = Array.from(this.selectedFiles)[0];
+        const newName = prompt('请输入新名称:', fileName);
+        
+        if (newName && newName.trim() && newName !== fileName) {
+            const currentFiles = this.files[this.currentPath] || [];
+            const fileIndex = currentFiles.findIndex(f => f.name === fileName);
+            
+            if (fileIndex !== -1) {
+                currentFiles[fileIndex].name = newName.trim();
+                this.selectedFiles.clear();
+                this.selectedFiles.add(newName.trim());
+                this.updateFileList();
+                Desktop.showNotification(`文件已重命名为: ${newName}`, 'success');
+            }
+        }
+    }
+    
+    selectAllFiles() {
+        const currentFiles = this.files[this.currentPath] || [];
+        this.selectedFiles.clear();
+        
+        currentFiles.forEach(file => {
+            if (file.type !== 'parent') {
+                this.selectedFiles.add(file.name);
+            }
         });
-
-        document.body.appendChild(contextMenu);
-
-        setTimeout(() => {
-            document.addEventListener('click', function closeMenu() {
-                contextMenu.remove();
-                document.removeEventListener('click', closeMenu);
-            });
-        }, 100);
+        
+        this.updateFileList();
     }
-
-    renameItem(fileItem) {
-        const oldName = fileItem.dataset.name;
-        const newName = prompt('请输入新名称:', oldName);
-        if (!newName || newName === oldName) return;
-
-        const currentDir = this.getCurrentDirectory();
-        if (currentDir && currentDir.children && currentDir.children[oldName]) {
-            currentDir.children[newName] = currentDir.children[oldName];
-            delete currentDir.children[oldName];
-            this.refresh();
-        }
-    }
-
-    deleteItem(fileItem) {
-        const name = fileItem.dataset.name;
-        if (!confirm(`确定要删除 "${name}" 吗？`)) return;
-
-        const currentDir = this.getCurrentDirectory();
-        if (currentDir && currentDir.children && currentDir.children[name]) {
-            delete currentDir.children[name];
-            this.refresh();
-        }
+    
+    destroy() {
+        console.log('文件管理器应用已销毁');
     }
 } 

@@ -1,622 +1,427 @@
-/**
- * WebOS浏览器应用
- * 提供完整的网页浏览功能
- */
-
+// 浏览器应用
 class BrowserApp {
-    constructor(windowManager) {
-        this.windowManager = windowManager;
-        this.appName = 'browser';
-        this.displayName = '浏览器';
-        this.icon = '🌐';
-        this.currentUrl = '';
+    constructor(windowId) {
+        this.windowId = windowId;
+        this.currentUrl = 'about:blank';
         this.history = [];
         this.historyIndex = -1;
-        this.bookmarks = JSON.parse(localStorage.getItem('webos_browser_bookmarks') || '[]');
-        this.homepage = 'https://www.baidu.com';
-        
-        this.defaultBookmarks = [
-            { name: '百度', url: 'https://www.baidu.com' },
-            { name: 'Google', url: 'https://www.google.com' },
-            { name: '知乎', url: 'https://www.zhihu.com' },
-            { name: '微博', url: 'https://weibo.com' },
-            { name: 'GitHub', url: 'https://github.com' },
-            { name: 'MDN', url: 'https://developer.mozilla.org' },
-            { name: '链接测试', url: 'http://localhost:8000/link-test.html' },
-            { name: '自动代理说明', url: 'http://localhost:8000/auto-proxy-test.html' }
-        ];
-        
-        // 重置书签到新的默认配置（移除旧的代理书签）
-        if (this.bookmarks.length === 0 || this.needsBookmarkUpdate()) {
-            this.bookmarks = [...this.defaultBookmarks];
-            this.saveBookmarks();
-        }
+        this.init();
     }
-
-    // 为了兼容现有架构，使用标准的应用接口
-    get title() {
-        return '浏览器';
+    
+    init() {
+        const content = WindowManager.getWindowContent(this.windowId);
+        content.innerHTML = this.getHTML();
+        this.setupEvents();
+        this.loadHomePage();
     }
-
-    render() {
-        return this.createContent();
-    }
-
-    onMount() {
-        // 获取当前窗口ID（由WindowManager设置）
-        setTimeout(() => {
-            const windowElements = document.querySelectorAll('.window');
-            for (let element of windowElements) {
-                if (element.querySelector('.browser-container')) {
-                    this.windowElement = element;
-                    this.setupEventListeners();
-                    this.navigateToHomepage();
-                    break;
-                }
-            }
-        }, 10);
-    }
-
-    createContent() {
+    
+    getHTML() {
         return `
-            <div class="browser-container">
+            <div class="browser-app">
                 <div class="browser-toolbar">
-                    <div class="nav-buttons">
-                        <button class="nav-btn" id="back-btn" title="后退" disabled>
-                            <span>←</span>
+                    <div class="browser-nav-buttons">
+                        <button class="nav-button" id="back-btn" title="后退">
+                            <i class="fas fa-arrow-left"></i>
                         </button>
-                        <button class="nav-btn" id="forward-btn" title="前进" disabled>
-                            <span>→</span>
+                        <button class="nav-button" id="forward-btn" title="前进">
+                            <i class="fas fa-arrow-right"></i>
                         </button>
-                        <button class="nav-btn" id="refresh-btn" title="刷新">
-                            <span>⟳</span>
+                        <button class="nav-button" id="refresh-btn" title="刷新">
+                            <i class="fas fa-sync"></i>
                         </button>
-                        <button class="nav-btn" id="home-btn" title="主页">
-                            <span>🏠</span>
+                        <button class="nav-button" id="home-btn" title="主页">
+                            <i class="fas fa-home"></i>
                         </button>
                     </div>
-                    
-                    <div class="address-bar-container">
-                        <input type="text" class="address-bar" id="address-bar" 
-                               placeholder="输入网址或搜索..." value="">
-                        <button class="go-btn" id="go-btn">访问</button>
+                    <input type="text" class="url-bar" id="url-bar" placeholder="请输入网址或搜索内容...">
+                    <div class="proxy-status" id="proxy-status" title="代理状态">
+                        <i class="fas fa-shield-alt"></i>
+                        <span id="proxy-indicator">检查中...</span>
                     </div>
-                    
-                    <div class="browser-actions">
-                        <button class="action-btn" id="bookmark-btn" title="添加书签">⭐</button>
-                        <button class="action-btn" id="bookmarks-btn" title="书签管理">📚</button>
-                        <button class="action-btn" id="history-btn" title="历史记录">📋</button>
-                    </div>
+                    <button class="nav-button" id="go-btn" title="访问">
+                        <i class="fas fa-arrow-right"></i>
+                    </button>
                 </div>
-                
-                <div class="bookmarks-bar" id="bookmarks-bar">
-                    ${this.createBookmarksBar()}
-                </div>
-                
-                <div class="browser-content" id="browser-content">
-                    <div class="loading-indicator" id="loading-indicator" style="display: none;">
-                        <div class="loading-spinner"></div>
-                        <span>正在加载...</span>
-                    </div>
-                    <iframe id="browser-frame" src="" frameborder="0" 
-                            sandbox="allow-same-origin allow-scripts allow-forms allow-popups allow-top-navigation"
-                            style="width: 100%; height: 100%; border: none;">
-                    </iframe>
-                </div>
-                
-                <div class="browser-status" id="browser-status">
-                    <span class="status-text">就绪</span>
-                    <span class="proxy-indicator" id="proxy-indicator" title="代理状态"></span>
-                    <span class="security-indicator" id="security-indicator"></span>
-                </div>
-            </div>
-            
-            <!-- 书签管理对话框 -->
-            <div class="bookmark-dialog" id="bookmark-dialog" style="display: none;">
-                <div class="dialog-content">
-                    <div class="dialog-header">
-                        <h3>书签管理</h3>
-                        <button class="close-dialog" id="close-bookmark-dialog">×</button>
-                    </div>
-                    <div class="dialog-body">
-                        <div class="bookmark-form">
-                            <h4>添加新书签</h4>
-                            <input type="text" id="bookmark-name" placeholder="书签名称">
-                            <input type="url" id="bookmark-url" placeholder="网址">
-                            <button id="add-bookmark">添加</button>
-                        </div>
-                        <div class="bookmark-list">
-                            <h4>现有书签</h4>
-                            <div id="bookmark-items"></div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-            
-            <!-- 历史记录对话框 -->
-            <div class="history-dialog" id="history-dialog" style="display: none;">
-                <div class="dialog-content">
-                    <div class="dialog-header">
-                        <h3>历史记录</h3>
-                        <button class="close-dialog" id="close-history-dialog">×</button>
-                    </div>
-                    <div class="dialog-body">
-                        <div id="history-items"></div>
-                    </div>
-                </div>
+                <iframe class="browser-iframe" id="browser-iframe" sandbox="allow-same-origin allow-scripts allow-forms allow-popups"></iframe>
             </div>
         `;
     }
-
-    createBookmarksBar() {
-        return this.bookmarks.slice(0, 8).map(bookmark => 
-            `<button class="bookmark-item" data-url="${bookmark.url}" title="${bookmark.name}">
-                ${bookmark.name}
-            </button>`
-        ).join('');
-    }
-
-    setupEventListeners() {
-        if (!this.windowElement) return;
-
+    
+    setupEvents() {
+        const content = WindowManager.getWindowContent(this.windowId);
+        
         // 导航按钮
-        this.windowElement.querySelector('#back-btn').addEventListener('click', () => this.goBack());
-        this.windowElement.querySelector('#forward-btn').addEventListener('click', () => this.goForward());
-        this.windowElement.querySelector('#refresh-btn').addEventListener('click', () => this.refresh());
-        this.windowElement.querySelector('#home-btn').addEventListener('click', () => this.goHome());
-
-        // 地址栏
-        const addressBar = this.windowElement.querySelector('#address-bar');
-        const goBtn = this.windowElement.querySelector('#go-btn');
+        content.querySelector('#back-btn').addEventListener('click', () => this.goBack());
+        content.querySelector('#forward-btn').addEventListener('click', () => this.goForward());
+        content.querySelector('#refresh-btn').addEventListener('click', () => this.refresh());
+        content.querySelector('#home-btn').addEventListener('click', () => this.goHome());
+        content.querySelector('#go-btn').addEventListener('click', () => this.navigate());
         
-        addressBar.addEventListener('keypress', (e) => {
+        // URL栏
+        const urlBar = content.querySelector('#url-bar');
+        urlBar.addEventListener('keypress', (e) => {
             if (e.key === 'Enter') {
-                this.navigate(addressBar.value);
+                this.navigate();
             }
         });
         
-        goBtn.addEventListener('click', () => {
-            this.navigate(addressBar.value);
-        });
-
-        // 书签功能
-        this.windowElement.querySelector('#bookmark-btn').addEventListener('click', () => this.addCurrentPageToBookmarks());
-        this.windowElement.querySelector('#bookmarks-btn').addEventListener('click', () => this.showBookmarkDialog());
-        this.windowElement.querySelector('#history-btn').addEventListener('click', () => this.showHistoryDialog());
-
-        // 书签栏点击
-        this.windowElement.querySelectorAll('.bookmark-item').forEach(item => {
-            item.addEventListener('click', () => {
-                this.navigate(item.dataset.url);
-            });
-        });
-
         // iframe加载事件
-        const iframe = this.windowElement.querySelector('#browser-frame');
-        iframe.addEventListener('load', () => this.onPageLoad());
-        iframe.addEventListener('error', () => this.onPageError());
-        
-        // 拦截iframe内的链接点击（通过事件冒泡）
-        this.setupLinkInterception();
-
-        // 对话框关闭
-        this.windowElement.querySelector('#close-bookmark-dialog')?.addEventListener('click', () => {
-            this.windowElement.querySelector('#bookmark-dialog').style.display = 'none';
+        const iframe = content.querySelector('#browser-iframe');
+        iframe.addEventListener('load', () => {
+            this.updateUI();
         });
         
-        this.windowElement.querySelector('#close-history-dialog')?.addEventListener('click', () => {
-            this.windowElement.querySelector('#history-dialog').style.display = 'none';
-        });
-
-        // 添加书签
-        this.windowElement.querySelector('#add-bookmark')?.addEventListener('click', () => {
-            this.addBookmark();
-        });
-    }
-
-    navigate(url) {
-        if (!url) return;
-        
-        // URL处理
-        let processedUrl = url.trim();
-        
-        // 如果不是完整URL，添加协议
-        if (!processedUrl.match(/^https?:\/\//)) {
-            if (processedUrl.includes('.') || processedUrl.includes('localhost')) {
-                processedUrl = 'https://' + processedUrl;
-            } else {
-                // 当作搜索关键词，使用百度搜索
-                processedUrl = `https://www.baidu.com/s?wd=${encodeURIComponent(processedUrl)}`;
-            }
-        }
-
-        this.showLoading();
-        this.currentUrl = processedUrl;
-        
-        // 更新地址栏（显示原始URL）
-        const addressBar = this.windowElement.querySelector('#address-bar');
-        addressBar.value = processedUrl;
-        
-        // 添加到历史记录
-        this.addToHistory(processedUrl);
-        
-        // 决定是否使用代理
-        const actualUrl = this.shouldUseProxy(processedUrl) ? 
-            this.getProxyUrl(processedUrl) : processedUrl;
-        
-        // 加载页面
-        const iframe = this.windowElement.querySelector('#browser-frame');
-        iframe.src = actualUrl;
-        
-        // 更新窗口标题
-        const titleElement = this.windowElement.querySelector('.window-title');
-        if (titleElement) titleElement.textContent = '浏览器 - 正在加载...';
-        
-        this.updateNavButtons();
-        this.updateSecurityIndicator(processedUrl);
-        
-        // 显示是否使用代理的状态
-        this.updateProxyStatus(this.shouldUseProxy(processedUrl));
-    }
-
-    /**
-     * 判断是否应该使用代理
-     */
-    shouldUseProxy(url) {
-        // 本地地址不使用代理
-        if (url.includes('localhost') || url.includes('127.0.0.1')) {
-            return false;
-        }
-        
-        // 已经是代理URL的不再使用代理
-        if (url.includes('localhost:9000/proxy')) {
-            return false;
-        }
-        
-        // 其他外部URL都使用代理
-        return url.startsWith('http://') || url.startsWith('https://');
-    }
-
-    /**
-     * 获取代理URL
-     */
-    getProxyUrl(originalUrl) {
-        return `http://localhost:9000/proxy?url=${encodeURIComponent(originalUrl)}`;
-    }
-
-    /**
-     * 检查是否需要更新书签（移除旧的代理书签）
-     */
-    needsBookmarkUpdate() {
-        // 检查是否有旧的代理书签格式
-        return this.bookmarks.some(bookmark => 
-            bookmark.url.includes('localhost:9000/proxy') || 
-            bookmark.name.includes('(代理)')
-        );
-    }
-
-    /**
-     * 设置链接拦截
-     */
-    setupLinkInterception() {
-        // 监听来自iframe的消息
+        // 监听来自iframe的消息（代理页面导航）
         window.addEventListener('message', (event) => {
-            // 确保消息来源安全
-            if (event.origin !== window.location.origin && 
-                !event.origin.startsWith('http://localhost:9000')) {
-                return;
-            }
-            
-            // 处理链接点击消息
-            if (event.data && event.data.type === 'linkClick') {
-                const url = event.data.url;
-                console.log('拦截到链接点击:', url);
-                
-                // 阻止iframe导航，改为在当前浏览器窗口中导航
-                this.navigate(url);
+            if (event.data && event.data.type === 'navigate') {
+                this.loadUrl(event.data.url);
             }
         });
         
-        // 监听iframe的src变化（作为备用方案）
-        const iframe = this.windowElement.querySelector('#browser-frame');
-        let lastSrc = iframe.src;
+        // 更新导航按钮状态
+        this.updateNavButtons();
         
-        const checkSrcChange = () => {
-            if (iframe.src !== lastSrc && iframe.src !== 'about:blank') {
-                // 检查是否是用户点击链接导致的导航
-                const newUrl = this.extractUrlFromProxy(iframe.src);
-                if (newUrl && newUrl !== this.currentUrl) {
-                    console.log('检测到iframe导航:', newUrl);
-                    // 更新地址栏和历史记录
-                    this.currentUrl = newUrl;
-                    const addressBar = this.windowElement.querySelector('#address-bar');
-                    addressBar.value = newUrl;
-                    this.addToHistory(newUrl);
-                    this.updateNavButtons();
-                    this.updateSecurityIndicator(newUrl);
-                    this.updateProxyStatus(this.shouldUseProxy(newUrl));
-                }
-                lastSrc = iframe.src;
-            }
-        };
-        
-        // 定期检查src变化
-        setInterval(checkSrcChange, 500);
+        // 检查代理服务器状态
+        this.updateProxyStatus();
     }
     
-    /**
-     * 从代理URL中提取原始URL
-     */
-    extractUrlFromProxy(proxyUrl) {
-        if (proxyUrl.includes('localhost:9000/proxy?url=')) {
-            try {
-                const urlParam = proxyUrl.split('localhost:9000/proxy?url=')[1];
-                return decodeURIComponent(urlParam);
-            } catch (e) {
-                return null;
+    navigate() {
+        const content = WindowManager.getWindowContent(this.windowId);
+        const urlBar = content.querySelector('#url-bar');
+        let url = urlBar.value.trim();
+        
+        if (!url) return;
+        
+        // 简单的URL验证和处理
+        if (!url.startsWith('http://') && !url.startsWith('https://') && !url.startsWith('about:')) {
+            // 如果看起来像域名，添加https
+            if (url.includes('.') && !url.includes(' ')) {
+                url = 'https://' + url;
+            } else {
+                // 否则作为搜索
+                url = `https://www.google.com/search?q=${encodeURIComponent(url)}`;
             }
         }
-        return proxyUrl;
-    }
-
-    /**
-     * 更新代理状态显示
-     */
-    updateProxyStatus(isUsingProxy) {
-        const statusText = this.windowElement.querySelector('.status-text');
-        const proxyIndicator = this.windowElement.querySelector('#proxy-indicator');
         
-        if (isUsingProxy) {
-            statusText.textContent = '正在加载（使用代理）...';
-            statusText.style.color = '#28a745';
-            proxyIndicator.textContent = '🔄';
-            proxyIndicator.title = '正在使用代理访问';
-            proxyIndicator.style.color = '#28a745';
-        } else {
-            statusText.textContent = '正在加载...';
-            statusText.style.color = '';
-            proxyIndicator.textContent = '🔗';
-            proxyIndicator.title = '直接访问';
-            proxyIndicator.style.color = '#6c757d';
+        this.loadUrl(url);
+    }
+    
+    loadUrl(url) {
+        const content = WindowManager.getWindowContent(this.windowId);
+        const iframe = content.querySelector('#browser-iframe');
+        const urlBar = content.querySelector('#url-bar');
+        
+        try {
+            // 添加到历史记录
+            if (this.currentUrl !== url) {
+                this.historyIndex++;
+                this.history = this.history.slice(0, this.historyIndex);
+                this.history.push(url);
+            }
+            
+            this.currentUrl = url;
+            urlBar.value = url;
+            
+            // 检查是否需要使用代理
+            if (this.shouldUseProxy(url)) {
+                const proxyUrl = this.getProxyUrl(url);
+                iframe.src = proxyUrl;
+            } else {
+                iframe.src = url;
+            }
+            
+            this.updateNavButtons();
+            this.showLoadingState();
+            
+        } catch (error) {
+            this.showErrorPage(error.message);
         }
     }
-
-    navigateToHomepage() {
-        this.navigate(this.homepage);
-    }
-
+    
     goBack() {
         if (this.historyIndex > 0) {
             this.historyIndex--;
             const url = this.history[this.historyIndex];
-            this.loadFromHistory(url);
+            this.loadUrlFromHistory(url);
         }
     }
-
+    
     goForward() {
         if (this.historyIndex < this.history.length - 1) {
             this.historyIndex++;
             const url = this.history[this.historyIndex];
-            this.loadFromHistory(url);
+            this.loadUrlFromHistory(url);
         }
     }
-
-    refresh() {
-        const iframe = this.windowElement.querySelector('#browser-frame');
-        iframe.src = iframe.src;
-        this.showLoading();
-    }
-
-    goHome() {
-        this.navigate(this.homepage);
-    }
-
-    loadFromHistory(url) {
+    
+    loadUrlFromHistory(url) {
+        const content = WindowManager.getWindowContent(this.windowId);
+        const iframe = content.querySelector('#browser-iframe');
+        const urlBar = content.querySelector('#url-bar');
+        
         this.currentUrl = url;
-        const addressBar = this.windowElement.querySelector('#address-bar');
-        addressBar.value = url;
+        urlBar.value = url;
         
-        // 决定是否使用代理
-        const actualUrl = this.shouldUseProxy(url) ? 
-            this.getProxyUrl(url) : url;
-        
-        const iframe = this.windowElement.querySelector('#browser-frame');
-        iframe.src = actualUrl;
+        // 检查是否需要使用代理
+        if (this.shouldUseProxy(url)) {
+            const proxyUrl = this.getProxyUrl(url);
+            iframe.src = proxyUrl;
+        } else {
+            iframe.src = url;
+        }
         
         this.updateNavButtons();
-        this.showLoading();
-        this.updateProxyStatus(this.shouldUseProxy(url));
     }
-
-    addToHistory(url) {
-        // 移除当前位置之后的历史记录
-        this.history = this.history.slice(0, this.historyIndex + 1);
-        // 添加新URL
-        this.history.push(url);
-        this.historyIndex = this.history.length - 1;
+    
+    refresh() {
+        const content = WindowManager.getWindowContent(this.windowId);
+        const iframe = content.querySelector('#browser-iframe');
+        iframe.src = iframe.src;
+        this.showLoadingState();
+    }
+    
+    goHome() {
+        this.loadHomePage();
+    }
+    
+    loadHomePage() {
+        const homePage = this.createHomePage();
+        const blob = new Blob([homePage], { type: 'text/html' });
+        const url = URL.createObjectURL(blob);
+        this.loadUrl(url);
+    }
+    
+    createHomePage() {
+        return `
+            <!DOCTYPE html>
+            <html lang="zh-CN">
+            <head>
+                <meta charset="UTF-8">
+                <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                <title>Web浏览器主页</title>
+                <style>
+                    body {
+                        font-family: 'Microsoft YaHei', Arial, sans-serif;
+                        margin: 0;
+                        padding: 40px;
+                        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                        color: white;
+                        text-align: center;
+                    }
+                    .container {
+                        max-width: 800px;
+                        margin: 0 auto;
+                    }
+                    h1 {
+                        font-size: 3em;
+                        margin-bottom: 20px;
+                        text-shadow: 0 2px 4px rgba(0,0,0,0.3);
+                    }
+                    .search-box {
+                        margin: 40px 0;
+                    }
+                    .search-input {
+                        width: 100%;
+                        max-width: 500px;
+                        padding: 15px 20px;
+                        font-size: 16px;
+                        border: none;
+                        border-radius: 25px;
+                        outline: none;
+                        box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+                    }
+                    .quick-links {
+                        display: grid;
+                        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+                        gap: 20px;
+                        margin-top: 40px;
+                    }
+                    .link-card {
+                        background: rgba(255,255,255,0.1);
+                        padding: 20px;
+                        border-radius: 10px;
+                        text-decoration: none;
+                        color: white;
+                        transition: transform 0.3s ease;
+                        backdrop-filter: blur(10px);
+                    }
+                    .link-card:hover {
+                        transform: translateY(-5px);
+                        background: rgba(255,255,255,0.2);
+                    }
+                    .link-title {
+                        font-size: 18px;
+                        font-weight: bold;
+                        margin-bottom: 10px;
+                    }
+                    .link-desc {
+                        font-size: 14px;
+                        opacity: 0.9;
+                    }
+                </style>
+            </head>
+            <body>
+                <div class="container">
+                    <h1>欢迎使用Web浏览器</h1>
+                    <div class="search-box">
+                        <input type="text" class="search-input" placeholder="搜索或输入网址..." 
+                               onkeypress="if(event.key==='Enter') parent.postMessage({type:'navigate', url:this.value}, '*')">
+                    </div>
+                    
+                    <div class="quick-links">
+                        <a href="#" class="link-card" onclick="parent.postMessage({type:'navigate', url:'https://www.baidu.com'}, '*'); return false;">
+                            <div class="link-title">百度</div>
+                            <div class="link-desc">中文搜索引擎</div>
+                        </a>
+                        <a href="#" class="link-card" onclick="parent.postMessage({type:'navigate', url:'https://www.google.com'}, '*'); return false;">
+                            <div class="link-title">Google</div>
+                            <div class="link-desc">全球搜索引擎</div>
+                        </a>
+                        <a href="#" class="link-card" onclick="parent.postMessage({type:'navigate', url:'https://github.com'}, '*'); return false;">
+                            <div class="link-title">GitHub</div>
+                            <div class="link-desc">代码托管平台</div>
+                        </a>
+                        <a href="#" class="link-card" onclick="parent.postMessage({type:'navigate', url:'https://stackoverflow.com'}, '*'); return false;">
+                            <div class="link-title">Stack Overflow</div>
+                            <div class="link-desc">程序员问答社区</div>
+                        </a>
+                    </div>
+                </div>
+                
+                <script>
+                    // 监听来自父页面的消息
+                    window.addEventListener('message', function(event) {
+                        if (event.data.type === 'navigate') {
+                            // 通知父窗口导航到指定URL
+                            parent.postMessage({type:'navigate', url: event.data.url}, '*');
+                        }
+                    });
+                </script>
+            </body>
+            </html>
+        `;
+    }
+    
+    showLoadingState() {
+        // 这里可以添加加载状态显示
+        console.log('加载中...');
+    }
+    
+    showErrorPage(error) {
+        const content = WindowManager.getWindowContent(this.windowId);
+        const iframe = content.querySelector('#browser-iframe');
         
-        // 限制历史记录数量
-        if (this.history.length > 100) {
-            this.history = this.history.slice(-100);
-            this.historyIndex = this.history.length - 1;
-        }
+        const errorPage = `
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <title>页面加载失败</title>
+                <style>
+                    body { font-family: Arial, sans-serif; text-align: center; padding: 50px; }
+                    .error { color: #f44336; font-size: 18px; }
+                </style>
+            </head>
+            <body>
+                <h1>无法加载页面</h1>
+                <p class="error">${error}</p>
+                <button onclick="history.back()">返回上一页</button>
+            </body>
+            </html>
+        `;
+        
+        const blob = new Blob([errorPage], { type: 'text/html' });
+        const url = URL.createObjectURL(blob);
+        iframe.src = url;
     }
-
+    
     updateNavButtons() {
-        const backBtn = this.windowElement.querySelector('#back-btn');
-        const forwardBtn = this.windowElement.querySelector('#forward-btn');
+        const content = WindowManager.getWindowContent(this.windowId);
+        const backBtn = content.querySelector('#back-btn');
+        const forwardBtn = content.querySelector('#forward-btn');
         
         backBtn.disabled = this.historyIndex <= 0;
         forwardBtn.disabled = this.historyIndex >= this.history.length - 1;
     }
-
-    showLoading() {
-        const loadingIndicator = this.windowElement.querySelector('#loading-indicator');
-        loadingIndicator.style.display = 'flex';
-        
-        const statusText = this.windowElement.querySelector('.status-text');
-        statusText.textContent = '正在加载...';
-    }
-
-    hideLoading() {
-        const loadingIndicator = this.windowElement.querySelector('#loading-indicator');
-        loadingIndicator.style.display = 'none';
-        
-        const statusText = this.windowElement.querySelector('.status-text');
-        statusText.textContent = '就绪';
-    }
-
-    onPageLoad() {
-        this.hideLoading();
+    
+    updateUI() {
+        const content = WindowManager.getWindowContent(this.windowId);
+        const iframe = content.querySelector('#browser-iframe');
+        const urlBar = content.querySelector('#url-bar');
         
         try {
-            const iframe = this.windowElement.querySelector('#browser-frame');
-            const iframeDocument = iframe.contentDocument || iframe.contentWindow.document;
-            const title = iframeDocument.title || this.currentUrl;
-            
-            const titleElement = this.windowElement.querySelector('.window-title');
-            if (titleElement) titleElement.textContent = `浏览器 - ${title}`;
+            if (iframe.contentWindow && iframe.contentWindow.location.href !== 'about:blank') {
+                urlBar.value = iframe.contentWindow.location.href;
+            }
         } catch (e) {
-            // 跨域限制，无法获取标题
-            const titleElement = this.windowElement.querySelector('.window-title');
-            if (titleElement) titleElement.textContent = `浏览器 - ${this.currentUrl}`;
-        }
-        
-        // 显示页面加载完成状态，包含代理信息
-        const statusText = this.windowElement.querySelector('.status-text');
-        const proxyIndicator = this.windowElement.querySelector('#proxy-indicator');
-        const isUsingProxy = this.shouldUseProxy(this.currentUrl);
-        
-        if (isUsingProxy) {
-            statusText.textContent = '页面加载完成（已使用代理）';
-            statusText.style.color = '#28a745';
-            proxyIndicator.textContent = '🔄';
-            proxyIndicator.title = '已通过代理访问';
-            proxyIndicator.style.color = '#28a745';
-        } else {
-            statusText.textContent = '页面加载完成';
-            statusText.style.color = '';
-            proxyIndicator.textContent = '🔗';
-            proxyIndicator.title = '直接访问';
-            proxyIndicator.style.color = '#6c757d';
+            // 跨域限制，无法访问iframe内容
         }
     }
-
-    onPageError() {
-        this.hideLoading();
+    
+    shouldUseProxy(url) {
+        // 判断是否需要使用代理
+        if (url.startsWith('about:') || 
+            url.startsWith('data:') || 
+            url.startsWith('blob:') ||
+            url.startsWith('javascript:') ||
+            url.includes('localhost:8080') ||
+            url.includes('localhost:9999')) {
+            return false;
+        }
         
-        const statusText = this.windowElement.querySelector('.status-text');
-        statusText.textContent = '页面加载失败';
-        
-        const titleElement = this.windowElement.querySelector('.window-title');
-        if (titleElement) titleElement.textContent = '浏览器 - 加载失败';
+        // 对于外部HTTP/HTTPS链接使用代理
+        return url.startsWith('http://') || url.startsWith('https://');
     }
-
-    updateSecurityIndicator(url) {
-        const securityIndicator = this.windowElement.querySelector('#security-indicator');
-        
-        if (url.startsWith('https://')) {
-            securityIndicator.textContent = '🔒';
-            securityIndicator.title = '安全连接';
-        } else if (url.startsWith('http://')) {
-            securityIndicator.textContent = '⚠️';
-            securityIndicator.title = '不安全连接';
-        } else {
-            securityIndicator.textContent = '';
-            securityIndicator.title = '';
+    
+    getProxyUrl(url) {
+        // 构建代理URL
+        const proxyBaseUrl = 'http://localhost:9999/proxy';
+        return `${proxyBaseUrl}?url=${encodeURIComponent(url)}`;
+    }
+    
+    async checkProxyStatus() {
+        // 检查代理服务器状态
+        try {
+            const response = await fetch('http://localhost:9999/', { mode: 'no-cors' });
+            return true; // 如果没有抛出错误，说明服务器在运行
+        } catch {
+            return false;
         }
     }
-
-    addCurrentPageToBookmarks() {
-        if (!this.currentUrl) return;
+    
+    async updateProxyStatus() {
+        const content = WindowManager.getWindowContent(this.windowId);
+        const proxyIndicator = content.querySelector('#proxy-indicator');
+        const proxyStatus = content.querySelector('#proxy-status');
         
-        const name = prompt('请输入书签名称:', this.currentUrl);
-        if (name) {
-            this.bookmarks.push({ name, url: this.currentUrl });
-            this.saveBookmarks();
-            this.updateBookmarksBar();
-        }
-    }
-
-    addBookmark() {
-        const nameInput = this.windowElement.querySelector('#bookmark-name');
-        const urlInput = this.windowElement.querySelector('#bookmark-url');
+        if (!proxyIndicator || !proxyStatus) return;
         
-        const name = nameInput.value.trim();
-        const url = urlInput.value.trim();
-        
-        if (name && url) {
-            this.bookmarks.push({ name, url });
-            this.saveBookmarks();
-            this.updateBookmarksBar();
-            this.updateBookmarkDialog();
+        try {
+            proxyIndicator.textContent = '检查中...';
+            proxyStatus.className = 'proxy-status checking';
             
-            nameInput.value = '';
-            urlInput.value = '';
+            const isOnline = await this.checkProxyStatus();
+            
+            if (isOnline) {
+                proxyIndicator.textContent = '代理已启用';
+                proxyStatus.className = 'proxy-status online';
+                proxyStatus.title = '代理服务器运行正常，外部网站将通过代理访问';
+            } else {
+                proxyIndicator.textContent = '代理离线';
+                proxyStatus.className = 'proxy-status offline';
+                proxyStatus.title = '代理服务器未启动，请先启动代理服务器';
+            }
+        } catch (error) {
+            proxyIndicator.textContent = '代理错误';
+            proxyStatus.className = 'proxy-status error';
+            proxyStatus.title = '代理状态检查失败';
         }
-    }
-
-    removeBookmark(index) {
-        this.bookmarks.splice(index, 1);
-        this.saveBookmarks();
-        this.updateBookmarksBar();
-        this.updateBookmarkDialog();
-    }
-
-    saveBookmarks() {
-        localStorage.setItem('webos_browser_bookmarks', JSON.stringify(this.bookmarks));
-    }
-
-    updateBookmarksBar() {
-        const bookmarksBar = this.windowElement.querySelector('#bookmarks-bar');
-        bookmarksBar.innerHTML = this.createBookmarksBar();
         
-        // 重新绑定事件
-        bookmarksBar.querySelectorAll('.bookmark-item').forEach(item => {
-            item.addEventListener('click', () => {
-                this.navigate(item.dataset.url);
-            });
-        });
+        // 定期检查代理状态
+        setTimeout(() => this.updateProxyStatus(), 10000);
     }
-
-    showBookmarkDialog() {
-        const dialog = this.windowElement.querySelector('#bookmark-dialog');
-        dialog.style.display = 'flex';
-        this.updateBookmarkDialog();
+    
+    destroy() {
+        // 清理资源
+        console.log('浏览器应用已销毁');
     }
-
-    updateBookmarkDialog() {
-        const bookmarkItems = this.windowElement.querySelector('#bookmark-items');
-        bookmarkItems.innerHTML = this.bookmarks.map((bookmark, index) => `
-            <div class="bookmark-entry">
-                <span class="bookmark-info">
-                    <strong>${bookmark.name}</strong><br>
-                    <small>${bookmark.url}</small>
-                </span>
-                <div class="bookmark-actions">
-                    <button onclick="window.browserApp.navigate('${bookmark.url}')">访问</button>
-                    <button onclick="window.browserApp.removeBookmark(${index})">删除</button>
-                </div>
-            </div>
-        `).join('');
-    }
-
-    showHistoryDialog() {
-        const dialog = this.windowElement.querySelector('#history-dialog');
-        dialog.style.display = 'flex';
-        
-        const historyItems = this.windowElement.querySelector('#history-items');
-        historyItems.innerHTML = this.history.slice(-20).reverse().map(url => `
-            <div class="history-entry">
-                <span class="history-url">${url}</span>
-                <button onclick="window.browserApp.navigate('${url}')">访问</button>
-            </div>
-        `).join('');
-    }
-}
-
-// 全局引用，用于对话框中的函数调用
-window.browserApp = null;
-
-// 导出应用类
-window.BrowserApp = BrowserApp; 
+} 

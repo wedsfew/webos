@@ -1,311 +1,103 @@
 // 文本编辑器应用
-class TextEditor extends Application {
-    constructor() {
-        super('文本编辑器', 'fas fa-file-text');
-        
-        this.content = '';
-        this.fileName = '未命名文档.txt';
+class TextEditorApp {
+    constructor(windowId) {
+        this.windowId = windowId;
+        this.currentFile = null;
         this.isModified = false;
-        this.wordWrap = true;
-        this.fontSize = 14;
+        this.content = '';
+        this.init();
     }
-
-    render() {
+    
+    init() {
+        const content = WindowManager.getWindowContent(this.windowId);
+        content.innerHTML = this.getHTML();
+        this.setupEvents();
+        this.updateTitle();
+    }
+    
+    getHTML() {
         return `
-            <div class="text-editor">
-                <div class="text-editor-toolbar">
-                    <button id="new-btn" title="新建 (Ctrl+N)">
+            <div class="texteditor-app">
+                <div class="editor-toolbar">
+                    <button class="editor-button" id="new-btn" title="新建文件">
                         <i class="fas fa-file"></i> 新建
                     </button>
-                    <button id="open-btn" title="打开 (Ctrl+O)">
+                    <button class="editor-button" id="open-btn" title="打开文件">
                         <i class="fas fa-folder-open"></i> 打开
                     </button>
-                    <button id="save-btn" title="保存 (Ctrl+S)">
+                    <button class="editor-button" id="save-btn" title="保存文件">
                         <i class="fas fa-save"></i> 保存
                     </button>
-                    <div class="toolbar-separator"></div>
-                    <button id="undo-btn" title="撤销 (Ctrl+Z)">
+                    <button class="editor-button" id="save-as-btn" title="另存为">
+                        <i class="fas fa-save"></i> 另存为
+                    </button>
+                    <div style="border-left: 1px solid #ddd; height: 20px; margin: 0 10px;"></div>
+                    <button class="editor-button" id="undo-btn" title="撤销">
                         <i class="fas fa-undo"></i>
                     </button>
-                    <button id="redo-btn" title="重做 (Ctrl+Y)">
+                    <button class="editor-button" id="redo-btn" title="重做">
                         <i class="fas fa-redo"></i>
                     </button>
-                    <div class="toolbar-separator"></div>
-                    <button id="find-btn" title="查找 (Ctrl+F)">
+                    <div style="border-left: 1px solid #ddd; height: 20px; margin: 0 10px;"></div>
+                    <button class="editor-button" id="find-btn" title="查找">
                         <i class="fas fa-search"></i> 查找
                     </button>
-                    <button id="replace-btn" title="替换 (Ctrl+H)">
+                    <button class="editor-button" id="replace-btn" title="替换">
                         <i class="fas fa-exchange-alt"></i> 替换
                     </button>
-                    <div class="toolbar-separator"></div>
-                    <button id="wordwrap-btn" title="自动换行" class="${this.wordWrap ? 'active' : ''}">
-                        <i class="fas fa-align-left"></i>
-                    </button>
-                    <select id="font-size-select" title="字体大小">
-                        <option value="12" ${this.fontSize === 12 ? 'selected' : ''}>12px</option>
-                        <option value="14" ${this.fontSize === 14 ? 'selected' : ''}>14px</option>
-                        <option value="16" ${this.fontSize === 16 ? 'selected' : ''}>16px</option>
-                        <option value="18" ${this.fontSize === 18 ? 'selected' : ''}>18px</option>
-                        <option value="20" ${this.fontSize === 20 ? 'selected' : ''}>20px</option>
+                    <div style="flex: 1;"></div>
+                    <select class="editor-button" id="font-size" title="字体大小">
+                        <option value="12">12px</option>
+                        <option value="14" selected>14px</option>
+                        <option value="16">16px</option>
+                        <option value="18">18px</option>
+                        <option value="20">20px</option>
                     </select>
                 </div>
-                <textarea 
-                    class="text-editor-content" 
-                    placeholder="开始输入..." 
-                    style="font-size: ${this.fontSize}px; white-space: ${this.wordWrap ? 'pre-wrap' : 'pre'};"
-                >${this.content}</textarea>
-                <div class="text-editor-status">
-                    <span class="status-info">
-                        <span id="char-count">字符: 0</span>
-                        <span id="line-count">行: 1</span>
-                        <span id="cursor-pos">位置: 1:1</span>
-                    </span>
-                    <span class="file-status">
-                        <span id="file-name">${this.fileName}</span>
-                        <span id="modified-indicator" class="${this.isModified ? 'visible' : ''}">*</span>
-                    </span>
+                <div class="editor-content">
+                    <textarea class="editor-textarea" id="editor-textarea" placeholder="在此输入文本内容..."></textarea>
                 </div>
             </div>
         `;
     }
-
-    onMount() {
-        this.setupEventListeners();
-        this.updateTitle();
-        this.updateStatus();
-    }
-
-    setupEventListeners() {
-        const window = document.querySelector(`[data-window-id="${this.windowId}"]`);
-        const textarea = window.querySelector('.text-editor-content');
-
-        // 工具栏按钮
-        window.querySelector('#new-btn').addEventListener('click', () => this.newFile());
-        window.querySelector('#open-btn').addEventListener('click', () => this.openFile());
-        window.querySelector('#save-btn').addEventListener('click', () => this.saveFile());
-        window.querySelector('#undo-btn').addEventListener('click', () => this.undo());
-        window.querySelector('#redo-btn').addEventListener('click', () => this.redo());
-        window.querySelector('#find-btn').addEventListener('click', () => this.showFindDialog());
-        window.querySelector('#replace-btn').addEventListener('click', () => this.showReplaceDialog());
-        window.querySelector('#wordwrap-btn').addEventListener('click', () => this.toggleWordWrap());
-        window.querySelector('#font-size-select').addEventListener('change', (e) => this.changeFontSize(e.target.value));
-
+    
+    setupEvents() {
+        const content = WindowManager.getWindowContent(this.windowId);
+        const textarea = content.querySelector('#editor-textarea');
+        
+        // 工具栏按钮事件
+        content.querySelector('#new-btn').addEventListener('click', () => this.newFile());
+        content.querySelector('#open-btn').addEventListener('click', () => this.openFile());
+        content.querySelector('#save-btn').addEventListener('click', () => this.saveFile());
+        content.querySelector('#save-as-btn').addEventListener('click', () => this.saveAsFile());
+        content.querySelector('#undo-btn').addEventListener('click', () => this.undo());
+        content.querySelector('#redo-btn').addEventListener('click', () => this.redo());
+        content.querySelector('#find-btn').addEventListener('click', () => this.showFindDialog());
+        content.querySelector('#replace-btn').addEventListener('click', () => this.showReplaceDialog());
+        
+        // 字体大小改变
+        content.querySelector('#font-size').addEventListener('change', (e) => {
+            textarea.style.fontSize = e.target.value + 'px';
+        });
+        
         // 文本区域事件
         textarea.addEventListener('input', () => {
-            this.onContentChange();
-        });
-
-        textarea.addEventListener('keydown', (e) => {
-            this.handleKeyboardShortcuts(e);
-        });
-
-        textarea.addEventListener('selectionchange', () => {
-            this.updateCursorPosition();
-        });
-
-        // 更新光标位置
-        textarea.addEventListener('click', () => {
-            this.updateCursorPosition();
-        });
-
-        textarea.addEventListener('keyup', () => {
-            this.updateCursorPosition();
-        });
-
-        // 拖拽文件支持
-        textarea.addEventListener('dragover', (e) => {
-            e.preventDefault();
-        });
-
-        textarea.addEventListener('drop', (e) => {
-            e.preventDefault();
-            this.handleFileDrop(e);
-        });
-    }
-
-    onContentChange() {
-        const window = document.querySelector(`[data-window-id="${this.windowId}"]`);
-        const textarea = window.querySelector('.text-editor-content');
-        
-        this.content = textarea.value;
-        this.isModified = true;
-        
-        this.updateTitle();
-        this.updateStatus();
-    }
-
-    updateTitle() {
-        const window = document.querySelector(`[data-window-id="${this.windowId}"]`);
-        const titleElement = window.querySelector('.window-title');
-        const modifiedIndicator = this.isModified ? '*' : '';
-        titleElement.textContent = `${modifiedIndicator}${this.fileName} - 文本编辑器`;
-    }
-
-    updateStatus() {
-        const window = document.querySelector(`[data-window-id="${this.windowId}"]`);
-        const textarea = window.querySelector('.text-editor-content');
-        
-        const charCount = textarea.value.length;
-        const lineCount = textarea.value.split('\n').length;
-        
-        window.querySelector('#char-count').textContent = `字符: ${charCount}`;
-        window.querySelector('#line-count').textContent = `行: ${lineCount}`;
-        window.querySelector('#file-name').textContent = this.fileName;
-        window.querySelector('#modified-indicator').className = this.isModified ? 'visible' : '';
-        
-        this.updateCursorPosition();
-    }
-
-    updateCursorPosition() {
-        const window = document.querySelector(`[data-window-id="${this.windowId}"]`);
-        const textarea = window.querySelector('.text-editor-content');
-        
-        const cursorPos = textarea.selectionStart;
-        const textBeforeCursor = textarea.value.substring(0, cursorPos);
-        const lines = textBeforeCursor.split('\n');
-        const currentLine = lines.length;
-        const currentColumn = lines[lines.length - 1].length + 1;
-        
-        window.querySelector('#cursor-pos').textContent = `位置: ${currentLine}:${currentColumn}`;
-    }
-
-    newFile() {
-        if (this.isModified) {
-            if (!confirm('当前文档尚未保存，确定要创建新文档吗？')) {
-                return;
-            }
-        }
-        
-        this.content = '';
-        this.fileName = '未命名文档.txt';
-        this.isModified = false;
-        
-        const window = document.querySelector(`[data-window-id="${this.windowId}"]`);
-        const textarea = window.querySelector('.text-editor-content');
-        textarea.value = '';
-        
-        this.updateTitle();
-        this.updateStatus();
-        textarea.focus();
-    }
-
-    openFile() {
-        // 创建文件输入元素
-        const fileInput = document.createElement('input');
-        fileInput.type = 'file';
-        fileInput.accept = '.txt,.md,.js,.css,.html,.json,.xml,.csv';
-        
-        fileInput.addEventListener('change', (e) => {
-            const file = e.target.files[0];
-            if (!file) return;
-            
-            const reader = new FileReader();
-            reader.onload = (e) => {
-                this.content = e.target.result;
-                this.fileName = file.name;
-                this.isModified = false;
-                
-                const window = document.querySelector(`[data-window-id="${this.windowId}"]`);
-                const textarea = window.querySelector('.text-editor-content');
-                textarea.value = this.content;
-                
-                this.updateTitle();
-                this.updateStatus();
-            };
-            reader.readAsText(file);
+            this.content = textarea.value;
+            this.setModified(true);
         });
         
-        fileInput.click();
+        // 键盘快捷键
+        document.addEventListener('keydown', (e) => this.handleKeyboard(e));
+        
+        // 防止窗口关闭时丢失未保存的内容
+        this.setupBeforeUnload();
     }
-
-    saveFile() {
-        // 创建下载链接
-        const blob = new Blob([this.content], { type: 'text/plain' });
-        const url = URL.createObjectURL(blob);
+    
+    handleKeyboard(e) {
+        if (WindowManager.getActiveWindow() !== this.windowId) return;
         
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = this.fileName;
-        a.click();
-        
-        URL.revokeObjectURL(url);
-        
-        this.isModified = false;
-        this.updateTitle();
-        this.updateStatus();
-    }
-
-    undo() {
-        const window = document.querySelector(`[data-window-id="${this.windowId}"]`);
-        const textarea = window.querySelector('.text-editor-content');
-        document.execCommand('undo');
-        this.onContentChange();
-    }
-
-    redo() {
-        const window = document.querySelector(`[data-window-id="${this.windowId}"]`);
-        const textarea = window.querySelector('.text-editor-content');
-        document.execCommand('redo');
-        this.onContentChange();
-    }
-
-    showFindDialog() {
-        const searchText = prompt('请输入要查找的内容:');
-        if (!searchText) return;
-        
-        const window = document.querySelector(`[data-window-id="${this.windowId}"]`);
-        const textarea = window.querySelector('.text-editor-content');
-        
-        const content = textarea.value;
-        const index = content.indexOf(searchText);
-        
-        if (index !== -1) {
-            textarea.focus();
-            textarea.setSelectionRange(index, index + searchText.length);
-        } else {
-            alert('未找到指定内容');
-        }
-    }
-
-    showReplaceDialog() {
-        const searchText = prompt('请输入要查找的内容:');
-        if (!searchText) return;
-        
-        const replaceText = prompt('请输入替换内容:');
-        if (replaceText === null) return;
-        
-        const window = document.querySelector(`[data-window-id="${this.windowId}"]`);
-        const textarea = window.querySelector('.text-editor-content');
-        
-        const newContent = textarea.value.replace(new RegExp(searchText, 'g'), replaceText);
-        textarea.value = newContent;
-        this.onContentChange();
-        
-        alert('替换完成');
-    }
-
-    toggleWordWrap() {
-        this.wordWrap = !this.wordWrap;
-        
-        const window = document.querySelector(`[data-window-id="${this.windowId}"]`);
-        const textarea = window.querySelector('.text-editor-content');
-        const button = window.querySelector('#wordwrap-btn');
-        
-        textarea.style.whiteSpace = this.wordWrap ? 'pre-wrap' : 'pre';
-        button.className = this.wordWrap ? 'active' : '';
-    }
-
-    changeFontSize(size) {
-        this.fontSize = parseInt(size);
-        
-        const window = document.querySelector(`[data-window-id="${this.windowId}"]`);
-        const textarea = window.querySelector('.text-editor-content');
-        textarea.style.fontSize = `${this.fontSize}px`;
-    }
-
-    handleKeyboardShortcuts(e) {
         if (e.ctrlKey || e.metaKey) {
-            switch (e.key) {
+            switch(e.key) {
                 case 'n':
                     e.preventDefault();
                     this.newFile();
@@ -316,7 +108,11 @@ class TextEditor extends Application {
                     break;
                 case 's':
                     e.preventDefault();
-                    this.saveFile();
+                    if (e.shiftKey) {
+                        this.saveAsFile();
+                    } else {
+                        this.saveFile();
+                    }
                     break;
                 case 'f':
                     e.preventDefault();
@@ -326,143 +122,352 @@ class TextEditor extends Application {
                     e.preventDefault();
                     this.showReplaceDialog();
                     break;
-                case '=':
-                case '+':
+                case 'z':
                     e.preventDefault();
-                    this.changeFontSize(Math.min(this.fontSize + 2, 24));
-                    break;
-                case '-':
-                    e.preventDefault();
-                    this.changeFontSize(Math.max(this.fontSize - 2, 10));
+                    if (e.shiftKey) {
+                        this.redo();
+                    } else {
+                        this.undo();
+                    }
                     break;
             }
         }
-        
-        // Tab键插入制表符
-        if (e.key === 'Tab') {
-            e.preventDefault();
-            const textarea = e.target;
-            const start = textarea.selectionStart;
-            const end = textarea.selectionEnd;
-            
-            textarea.value = textarea.value.substring(0, start) + '\t' + textarea.value.substring(end);
-            textarea.selectionStart = textarea.selectionEnd = start + 1;
-            
-            this.onContentChange();
-        }
     }
-
-    handleFileDrop(e) {
-        const files = e.dataTransfer.files;
-        if (files.length === 0) return;
+    
+    newFile() {
+        if (this.isModified) {
+            const save = confirm('当前文件已修改，是否保存？');
+            if (save) {
+                this.saveFile();
+            }
+        }
         
-        const file = files[0];
+        this.currentFile = null;
+        this.content = '';
+        this.setModified(false);
+        
+        const content = WindowManager.getWindowContent(this.windowId);
+        const textarea = content.querySelector('#editor-textarea');
+        textarea.value = '';
+        
+        this.updateTitle();
+        Desktop.showNotification('已创建新文件', 'success');
+    }
+    
+    openFile() {
+        // 创建文件选择对话框
+        const modal = Desktop.createModal({
+            title: '打开文件',
+            content: `
+                <div style="padding: 20px;">
+                    <div style="margin-bottom: 15px;">
+                        <label for="file-input">选择文件:</label>
+                        <input type="file" id="file-input" accept=".txt,.js,.css,.html,.json,.md" style="width: 100%; margin-top: 5px;">
+                    </div>
+                    <div style="font-size: 12px; color: #666;">
+                        支持的文件格式: .txt, .js, .css, .html, .json, .md
+                    </div>
+                </div>
+            `,
+            buttons: [
+                {
+                    text: '取消',
+                    onClick: () => Desktop.closeModal()
+                },
+                {
+                    text: '打开',
+                    className: 'primary',
+                    onClick: () => {
+                        const fileInput = document.querySelector('#file-input');
+                        if (fileInput.files.length > 0) {
+                            this.loadFile(fileInput.files[0]);
+                            Desktop.closeModal();
+                        } else {
+                            alert('请选择一个文件');
+                        }
+                    }
+                }
+            ]
+        });
+        
+        document.body.appendChild(modal);
+    }
+    
+    loadFile(file) {
         const reader = new FileReader();
-        
         reader.onload = (e) => {
+            this.currentFile = file.name;
             this.content = e.target.result;
-            this.fileName = file.name;
-            this.isModified = false;
+            this.setModified(false);
             
-            const window = document.querySelector(`[data-window-id="${this.windowId}"]`);
-            const textarea = window.querySelector('.text-editor-content');
+            const content = WindowManager.getWindowContent(this.windowId);
+            const textarea = content.querySelector('#editor-textarea');
             textarea.value = this.content;
             
             this.updateTitle();
-            this.updateStatus();
+            Desktop.showNotification(`已打开文件: ${file.name}`, 'success');
+        };
+        
+        reader.onerror = () => {
+            Desktop.showNotification('文件读取失败', 'error');
         };
         
         reader.readAsText(file);
     }
-
-    // 获取选中的文本
-    getSelectedText() {
-        const window = document.querySelector(`[data-window-id="${this.windowId}"]`);
-        const textarea = window.querySelector('.text-editor-content');
-        
-        const start = textarea.selectionStart;
-        const end = textarea.selectionEnd;
-        
-        return textarea.value.substring(start, end);
-    }
-
-    // 插入文本
-    insertText(text) {
-        const window = document.querySelector(`[data-window-id="${this.windowId}"]`);
-        const textarea = window.querySelector('.text-editor-content');
-        
-        const start = textarea.selectionStart;
-        const end = textarea.selectionEnd;
-        
-        textarea.value = textarea.value.substring(0, start) + text + textarea.value.substring(end);
-        textarea.selectionStart = textarea.selectionEnd = start + text.length;
-        
-        this.onContentChange();
-        textarea.focus();
-    }
-
-    onUnmount() {
-        if (this.isModified) {
-            return confirm('文档尚未保存，确定要关闭吗？');
+    
+    saveFile() {
+        if (!this.currentFile) {
+            this.saveAsFile();
+            return;
         }
+        
+        this.downloadFile(this.currentFile, this.content);
+        this.setModified(false);
+        Desktop.showNotification(`文件已保存: ${this.currentFile}`, 'success');
+    }
+    
+    saveAsFile() {
+        const fileName = prompt('请输入文件名:', this.currentFile || '新文件.txt');
+        if (fileName) {
+            this.currentFile = fileName;
+            this.downloadFile(fileName, this.content);
+            this.setModified(false);
+            this.updateTitle();
+            Desktop.showNotification(`文件已保存为: ${fileName}`, 'success');
+        }
+    }
+    
+    downloadFile(fileName, content) {
+        const blob = new Blob([content], { type: 'text/plain' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = fileName;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+    }
+    
+    undo() {
+        const content = WindowManager.getWindowContent(this.windowId);
+        const textarea = content.querySelector('#editor-textarea');
+        document.execCommand('undo');
+        this.content = textarea.value;
+    }
+    
+    redo() {
+        const content = WindowManager.getWindowContent(this.windowId);
+        const textarea = content.querySelector('#editor-textarea');
+        document.execCommand('redo');
+        this.content = textarea.value;
+    }
+    
+    showFindDialog() {
+        const modal = Desktop.createModal({
+            title: '查找',
+            content: `
+                <div style="padding: 20px;">
+                    <div style="margin-bottom: 15px;">
+                        <label for="find-text">查找内容:</label>
+                        <input type="text" id="find-text" style="width: 100%; margin-top: 5px; padding: 5px;">
+                    </div>
+                    <div style="margin-bottom: 15px;">
+                        <label>
+                            <input type="checkbox" id="case-sensitive"> 区分大小写
+                        </label>
+                    </div>
+                </div>
+            `,
+            buttons: [
+                {
+                    text: '取消',
+                    onClick: () => Desktop.closeModal()
+                },
+                {
+                    text: '查找',
+                    className: 'primary',
+                    onClick: () => {
+                        const findText = document.querySelector('#find-text').value;
+                        const caseSensitive = document.querySelector('#case-sensitive').checked;
+                        this.findText(findText, caseSensitive);
+                        Desktop.closeModal();
+                    }
+                }
+            ]
+        });
+        
+        document.body.appendChild(modal);
+        
+        // 聚焦到输入框
+        setTimeout(() => {
+            document.querySelector('#find-text').focus();
+        }, 100);
+    }
+    
+    showReplaceDialog() {
+        const modal = Desktop.createModal({
+            title: '查找和替换',
+            content: `
+                <div style="padding: 20px;">
+                    <div style="margin-bottom: 15px;">
+                        <label for="find-text">查找内容:</label>
+                        <input type="text" id="find-text" style="width: 100%; margin-top: 5px; padding: 5px;">
+                    </div>
+                    <div style="margin-bottom: 15px;">
+                        <label for="replace-text">替换为:</label>
+                        <input type="text" id="replace-text" style="width: 100%; margin-top: 5px; padding: 5px;">
+                    </div>
+                    <div style="margin-bottom: 15px;">
+                        <label>
+                            <input type="checkbox" id="case-sensitive"> 区分大小写
+                        </label>
+                    </div>
+                </div>
+            `,
+            buttons: [
+                {
+                    text: '取消',
+                    onClick: () => Desktop.closeModal()
+                },
+                {
+                    text: '替换',
+                    onClick: () => {
+                        const findText = document.querySelector('#find-text').value;
+                        const replaceText = document.querySelector('#replace-text').value;
+                        const caseSensitive = document.querySelector('#case-sensitive').checked;
+                        this.replaceText(findText, replaceText, caseSensitive, false);
+                        Desktop.closeModal();
+                    }
+                },
+                {
+                    text: '全部替换',
+                    className: 'primary',
+                    onClick: () => {
+                        const findText = document.querySelector('#find-text').value;
+                        const replaceText = document.querySelector('#replace-text').value;
+                        const caseSensitive = document.querySelector('#case-sensitive').checked;
+                        this.replaceText(findText, replaceText, caseSensitive, true);
+                        Desktop.closeModal();
+                    }
+                }
+            ]
+        });
+        
+        document.body.appendChild(modal);
+    }
+    
+    findText(searchText, caseSensitive) {
+        if (!searchText) return;
+        
+        const content = WindowManager.getWindowContent(this.windowId);
+        const textarea = content.querySelector('#editor-textarea');
+        const text = textarea.value;
+        
+        let index;
+        if (caseSensitive) {
+            index = text.indexOf(searchText, textarea.selectionEnd);
+        } else {
+            index = text.toLowerCase().indexOf(searchText.toLowerCase(), textarea.selectionEnd);
+        }
+        
+        if (index === -1) {
+            // 从头开始查找
+            if (caseSensitive) {
+                index = text.indexOf(searchText);
+            } else {
+                index = text.toLowerCase().indexOf(searchText.toLowerCase());
+            }
+        }
+        
+        if (index !== -1) {
+            textarea.focus();
+            textarea.setSelectionRange(index, index + searchText.length);
+            Desktop.showNotification('找到匹配项', 'success');
+        } else {
+            Desktop.showNotification('未找到匹配项', 'info');
+        }
+    }
+    
+    replaceText(findText, replaceText, caseSensitive, replaceAll) {
+        if (!findText) return;
+        
+        const content = WindowManager.getWindowContent(this.windowId);
+        const textarea = content.querySelector('#editor-textarea');
+        let text = textarea.value;
+        
+        let count = 0;
+        if (replaceAll) {
+            if (caseSensitive) {
+                const regex = new RegExp(findText.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g');
+                text = text.replace(regex, () => {
+                    count++;
+                    return replaceText;
+                });
+            } else {
+                const regex = new RegExp(findText.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi');
+                text = text.replace(regex, () => {
+                    count++;
+                    return replaceText;
+                });
+            }
+            
+            textarea.value = text;
+            this.content = text;
+            this.setModified(true);
+            Desktop.showNotification(`已替换 ${count} 处`, 'success');
+        } else {
+            // 单次替换
+            const selectedText = textarea.value.substring(textarea.selectionStart, textarea.selectionEnd);
+            const matches = caseSensitive ? 
+                selectedText === findText : 
+                selectedText.toLowerCase() === findText.toLowerCase();
+                
+            if (matches) {
+                const before = textarea.value.substring(0, textarea.selectionStart);
+                const after = textarea.value.substring(textarea.selectionEnd);
+                textarea.value = before + replaceText + after;
+                
+                // 选中替换后的文本
+                textarea.setSelectionRange(
+                    textarea.selectionStart, 
+                    textarea.selectionStart + replaceText.length
+                );
+                
+                this.content = textarea.value;
+                this.setModified(true);
+                Desktop.showNotification('已替换', 'success');
+            } else {
+                // 如果当前选择不匹配，则查找下一个
+                this.findText(findText, caseSensitive);
+            }
+        }
+    }
+    
+    setModified(modified) {
+        this.isModified = modified;
+        this.updateTitle();
+    }
+    
+    updateTitle() {
+        const title = this.currentFile || '未命名文档';
+        const modified = this.isModified ? ' *' : '';
+        WindowManager.setWindowTitle(this.windowId, `文本编辑器 - ${title}${modified}`);
+    }
+    
+    setupBeforeUnload() {
+        // 这里可以添加窗口关闭前的检查
+    }
+    
+    destroy() {
+        if (this.isModified) {
+            const save = confirm('文件已修改但未保存，确定要关闭吗？');
+            if (!save) {
+                return false; // 取消关闭
+            }
+        }
+        
+        console.log('文本编辑器应用已销毁');
         return true;
     }
-}
-
-// 添加工具栏分隔符样式
-const style = document.createElement('style');
-style.textContent = `
-    .toolbar-separator {
-        width: 1px;
-        height: 20px;
-        background: #ddd;
-        margin: 0 8px;
-    }
-    
-    .text-editor-toolbar button.active {
-        background: #007bff;
-        color: white;
-    }
-    
-    .text-editor-status {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        padding: 4px 12px;
-        background: #f8f9fa;
-        border-top: 1px solid #e9ecef;
-        font-size: 12px;
-        color: #666;
-    }
-    
-    .status-info {
-        display: flex;
-        gap: 16px;
-    }
-    
-    .file-status {
-        display: flex;
-        align-items: center;
-        gap: 4px;
-    }
-    
-    #modified-indicator {
-        color: #dc3545;
-        font-weight: bold;
-        opacity: 0;
-        transition: opacity 0.2s ease;
-    }
-    
-    #modified-indicator.visible {
-        opacity: 1;
-    }
-    
-    .text-editor .window-content {
-        padding: 0;
-    }
-    
-    .text-editor-content {
-        height: calc(100% - 80px);
-    }
-`;
-document.head.appendChild(style); 
+} 

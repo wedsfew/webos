@@ -1,351 +1,451 @@
 // 窗口管理器
-class WindowManager {
-    constructor() {
-        this.windows = new Map();
-        this.windowCounter = 0;
-        this.zIndexCounter = 100;
-        this.activeWindow = null;
-        
-        this.initEventListeners();
-    }
-
-    initEventListeners() {
-        // 阻止默认的拖拽行为
-        document.addEventListener('dragstart', (e) => e.preventDefault());
-    }
-
-    createWindow(app) {
-        const windowId = ++this.windowCounter;
-        const windowElement = this.createWindowElement(windowId, app);
-        
-        // 设置窗口位置（级联效果）
-        const offsetX = (windowId - 1) * 30;
-        const offsetY = (windowId - 1) * 30;
-        windowElement.style.left = `${50 + offsetX}px`;
-        windowElement.style.top = `${50 + offsetY}px`;
-        windowElement.style.zIndex = ++this.zIndexCounter;
-
-        // 渲染应用内容
-        const content = windowElement.querySelector('.window-content');
-        content.innerHTML = app.render();
-
-        // 添加到DOM
-        const container = document.getElementById('windows-container');
-        container.appendChild(windowElement);
-
-        // 存储窗口信息
-        this.windows.set(windowId, {
-            element: windowElement,
-            app: app,
-            isMaximized: false,
-            isMinimized: false,
-            originalSize: { width: 400, height: 300 },
-            originalPosition: { x: 50 + offsetX, y: 50 + offsetY }
+const WindowManager = {
+    windows: {},
+    windowsZIndex: 100,
+    activeWindow: null,
+    nextWindowId: 1,
+    
+    init() {
+        this.setupGlobalEvents();
+    },
+    
+    setupGlobalEvents() {
+        // 监听键盘快捷键
+        document.addEventListener('keydown', (e) => {
+            if (e.altKey && e.key === 'Tab') {
+                e.preventDefault();
+                this.switchWindow();
+            }
+            if (e.altKey && e.key === 'F4') {
+                e.preventDefault();
+                this.closeActiveWindow();
+            }
         });
-
-        // 设置事件监听器
-        this.setupWindowEvents(windowId);
-
-        // 调用应用的 onMount 回调
-        if (app.onMount) {
-            app.onMount();
-        }
-
-        // 聚焦新窗口
-        this.focusWindow(windowId);
-
-        return windowId;
-    }
-
-    createWindowElement(windowId, app) {
-        const template = document.getElementById('window-template');
-        const windowElement = template.content.cloneNode(true).querySelector('.window');
+    },
+    
+    createWindow({ title, icon, width = 800, height = 600, x, y, onClose, resizable = true, maximizable = true }) {
+        const windowId = `window-${this.nextWindowId++}`;
         
-        windowElement.dataset.windowId = windowId;
-        windowElement.querySelector('.window-title').textContent = app.title;
+        // 默认居中位置
+        if (x === undefined) x = (window.innerWidth - width) / 2;
+        if (y === undefined) y = (window.innerHeight - height - 40) / 2; // 减去任务栏高度
+        
+        const windowElement = this.createWindowElement(windowId, title, icon, width, height, x, y);
+        
+        const windowObj = {
+            id: windowId,
+            element: windowElement,
+            title,
+            icon,
+            width,
+            height,
+            x,
+            y,
+            minimized: false,
+            maximized: false,
+            resizable,
+            maximizable,
+            onClose
+        };
+        
+        this.windows[windowId] = windowObj;
+        
+        // 添加到DOM
+        document.getElementById('windows-container').appendChild(windowElement);
+        
+        // 设置事件监听器
+        this.setupWindowEvents(windowObj);
+        
+        // 激活窗口
+        this.activateWindow(windowId);
+        
+        return windowId;
+    },
+    
+    createWindowElement(windowId, title, icon, width, height, x, y) {
+        const windowElement = document.createElement('div');
+        windowElement.className = 'window';
+        windowElement.id = windowId;
+        windowElement.style.cssText = `
+            width: ${width}px;
+            height: ${height}px;
+            left: ${x}px;
+            top: ${y}px;
+            z-index: ${this.windowsZIndex++};
+        `;
+        
+        windowElement.innerHTML = `
+            <div class="window-header">
+                <div class="window-title">
+                    <i class="${icon}"></i>
+                    <span>${title}</span>
+                </div>
+                <div class="window-controls">
+                    <div class="window-control minimize" title="最小化">
+                        <i class="fas fa-minus"></i>
+                    </div>
+                    <div class="window-control maximize" title="最大化">
+                        <i class="fas fa-square"></i>
+                    </div>
+                    <div class="window-control close" title="关闭">
+                        <i class="fas fa-times"></i>
+                    </div>
+                </div>
+            </div>
+            <div class="window-content">
+                <!-- 应用内容将在这里动态添加 -->
+            </div>
+        `;
         
         return windowElement;
-    }
-
-    setupWindowEvents(windowId) {
-        const window = this.windows.get(windowId);
-        const windowElement = window.element;
-        const header = windowElement.querySelector('.window-header');
+    },
+    
+    setupWindowEvents(windowObj) {
+        const { element, id } = windowObj;
+        const header = element.querySelector('.window-header');
+        const minimizeBtn = element.querySelector('.minimize');
+        const maximizeBtn = element.querySelector('.maximize');
+        const closeBtn = element.querySelector('.close');
         
-        // 窗口聚焦
-        windowElement.addEventListener('mousedown', () => {
-            this.focusWindow(windowId);
-        });
-
-        // 窗口控制按钮
-        const minimizeBtn = windowElement.querySelector('.window-minimize');
-        const maximizeBtn = windowElement.querySelector('.window-maximize');
-        const closeBtn = windowElement.querySelector('.window-close');
-
-        minimizeBtn.addEventListener('click', () => this.minimizeWindow(windowId));
-        maximizeBtn.addEventListener('click', () => this.toggleMaximizeWindow(windowId));
-        closeBtn.addEventListener('click', () => this.closeWindow(windowId));
-
         // 拖拽功能
-        this.setupDragFunctionality(windowId, header);
-
-        // 调整大小功能
-        this.setupResizeFunctionality(windowId);
-    }
-
-    setupDragFunctionality(windowId, header) {
-        let isDragging = false;
-        let dragOffset = { x: 0, y: 0 };
-
-        header.addEventListener('mousedown', (e) => {
-            const window = this.windows.get(windowId);
-            if (window.isMaximized) return; // 最大化时不允许拖拽
-
-            isDragging = true;
-            const rect = window.element.getBoundingClientRect();
-            dragOffset.x = e.clientX - rect.left;
-            dragOffset.y = e.clientY - rect.top;
-
-            document.addEventListener('mousemove', handleMouseMove);
-            document.addEventListener('mouseup', handleMouseUp);
-
-            e.preventDefault();
+        this.makeDraggable(element, header);
+        
+        // 窗口控制按钮
+        minimizeBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            this.minimizeWindow(id);
         });
-
-        function handleMouseMove(e) {
+        
+        maximizeBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            this.toggleMaximizeWindow(id);
+        });
+        
+        closeBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            this.closeWindow(id);
+        });
+        
+        // 点击激活窗口
+        element.addEventListener('mousedown', () => {
+            this.activateWindow(id);
+        });
+        
+        // 双击标题栏最大化/还原
+        header.addEventListener('dblclick', () => {
+            if (windowObj.maximizable) {
+                this.toggleMaximizeWindow(id);
+            }
+        });
+        
+        // 调整大小功能
+        if (windowObj.resizable) {
+            this.makeResizable(element);
+        }
+    },
+    
+    makeDraggable(windowElement, handle) {
+        let isDragging = false;
+        let startX, startY, initialX, initialY;
+        
+        handle.addEventListener('mousedown', (e) => {
+            if (e.target.closest('.window-control')) return;
+            
+            isDragging = true;
+            startX = e.clientX;
+            startY = e.clientY;
+            initialX = windowElement.offsetLeft;
+            initialY = windowElement.offsetTop;
+            
+            document.addEventListener('mousemove', onMouseMove);
+            document.addEventListener('mouseup', onMouseUp);
+        });
+        
+        function onMouseMove(e) {
             if (!isDragging) return;
-
-            const window = this.windows.get(windowId);
-            const newX = e.clientX - dragOffset.x;
-            const newY = e.clientY - dragOffset.y;
-
-            // 边界检查
-            const maxX = window.innerWidth - window.element.offsetWidth;
-            const maxY = window.innerHeight - window.element.offsetHeight - 48; // 减去任务栏高度
-
-            const clampedX = Math.max(0, Math.min(newX, maxX));
-            const clampedY = Math.max(0, Math.min(newY, maxY));
-
-            window.element.style.left = `${clampedX}px`;
-            window.element.style.top = `${clampedY}px`;
+            
+            const deltaX = e.clientX - startX;
+            const deltaY = e.clientY - startY;
+            
+            const newX = initialX + deltaX;
+            const newY = Math.max(0, initialY + deltaY); // 防止拖拽到屏幕上方
+            
+            windowElement.style.left = `${newX}px`;
+            windowElement.style.top = `${newY}px`;
         }
-
-        function handleMouseUp() {
+        
+        function onMouseUp() {
             isDragging = false;
-            document.removeEventListener('mousemove', handleMouseMove);
-            document.removeEventListener('mouseup', handleMouseUp);
+            document.removeEventListener('mousemove', onMouseMove);
+            document.removeEventListener('mouseup', onMouseUp);
         }
-
-        // 绑定this上下文
-        handleMouseMove = handleMouseMove.bind(this);
-    }
-
-    setupResizeFunctionality(windowId) {
-        const window = this.windows.get(windowId);
-        const windowElement = window.element;
-
-        // 创建调整大小的控制点
-        const resizeHandles = ['se', 'sw', 'ne', 'nw', 'n', 's', 'e', 'w'];
+    },
+    
+    makeResizable(windowElement) {
+        const resizeHandles = ['nw', 'n', 'ne', 'w', 'e', 'sw', 's', 'se'];
         
         resizeHandles.forEach(direction => {
             const handle = document.createElement('div');
             handle.className = `resize-handle resize-${direction}`;
-            handle.style.cssText = this.getResizeHandleStyles(direction);
+            handle.style.cssText = `
+                position: absolute;
+                background: transparent;
+                z-index: 10;
+            `;
+            
+            // 设置手柄位置和大小
+            switch(direction) {
+                case 'n':
+                    handle.style.cssText += 'top: 0; left: 5px; right: 5px; height: 5px; cursor: n-resize;';
+                    break;
+                case 's':
+                    handle.style.cssText += 'bottom: 0; left: 5px; right: 5px; height: 5px; cursor: s-resize;';
+                    break;
+                case 'w':
+                    handle.style.cssText += 'left: 0; top: 5px; bottom: 5px; width: 5px; cursor: w-resize;';
+                    break;
+                case 'e':
+                    handle.style.cssText += 'right: 0; top: 5px; bottom: 5px; width: 5px; cursor: e-resize;';
+                    break;
+                case 'nw':
+                    handle.style.cssText += 'top: 0; left: 0; width: 5px; height: 5px; cursor: nw-resize;';
+                    break;
+                case 'ne':
+                    handle.style.cssText += 'top: 0; right: 0; width: 5px; height: 5px; cursor: ne-resize;';
+                    break;
+                case 'sw':
+                    handle.style.cssText += 'bottom: 0; left: 0; width: 5px; height: 5px; cursor: sw-resize;';
+                    break;
+                case 'se':
+                    handle.style.cssText += 'bottom: 0; right: 0; width: 5px; height: 5px; cursor: se-resize;';
+                    break;
+            }
+            
             windowElement.appendChild(handle);
-
-            handle.addEventListener('mousedown', (e) => {
-                if (window.isMaximized) return;
-                this.startResize(windowId, direction, e);
-            });
+            
+            // 添加调整大小功能
+            this.addResizeFunction(handle, windowElement, direction);
         });
-    }
-
-    getResizeHandleStyles(direction) {
-        const baseStyle = 'position: absolute; background: transparent; cursor: ';
+    },
+    
+    addResizeFunction(handle, windowElement, direction) {
+        handle.addEventListener('mousedown', (e) => {
+            e.stopPropagation();
+            
+            const startX = e.clientX;
+            const startY = e.clientY;
+            const startWidth = windowElement.offsetWidth;
+            const startHeight = windowElement.offsetHeight;
+            const startLeft = windowElement.offsetLeft;
+            const startTop = windowElement.offsetTop;
+            
+            function onMouseMove(e) {
+                const deltaX = e.clientX - startX;
+                const deltaY = e.clientY - startY;
+                
+                let newWidth = startWidth;
+                let newHeight = startHeight;
+                let newLeft = startLeft;
+                let newTop = startTop;
+                
+                if (direction.includes('e')) {
+                    newWidth = Math.max(400, startWidth + deltaX);
+                }
+                if (direction.includes('w')) {
+                    newWidth = Math.max(400, startWidth - deltaX);
+                    newLeft = startLeft + (startWidth - newWidth);
+                }
+                if (direction.includes('s')) {
+                    newHeight = Math.max(300, startHeight + deltaY);
+                }
+                if (direction.includes('n')) {
+                    newHeight = Math.max(300, startHeight - deltaY);
+                    newTop = startTop + (startHeight - newHeight);
+                }
+                
+                windowElement.style.width = `${newWidth}px`;
+                windowElement.style.height = `${newHeight}px`;
+                windowElement.style.left = `${newLeft}px`;
+                windowElement.style.top = `${newTop}px`;
+            }
+            
+            function onMouseUp() {
+                document.removeEventListener('mousemove', onMouseMove);
+                document.removeEventListener('mouseup', onMouseUp);
+            }
+            
+            document.addEventListener('mousemove', onMouseMove);
+            document.addEventListener('mouseup', onMouseUp);
+        });
+    },
+    
+    activateWindow(windowId) {
+        if (!this.windows[windowId]) return;
         
-        switch (direction) {
-            case 'se': return baseStyle + 'se-resize; right: 0; bottom: 0; width: 10px; height: 10px;';
-            case 'sw': return baseStyle + 'sw-resize; left: 0; bottom: 0; width: 10px; height: 10px;';
-            case 'ne': return baseStyle + 'ne-resize; right: 0; top: 0; width: 10px; height: 10px;';
-            case 'nw': return baseStyle + 'nw-resize; left: 0; top: 0; width: 10px; height: 10px;';
-            case 'n': return baseStyle + 'n-resize; top: 0; left: 10px; right: 10px; height: 5px;';
-            case 's': return baseStyle + 's-resize; bottom: 0; left: 10px; right: 10px; height: 5px;';
-            case 'e': return baseStyle + 'e-resize; right: 0; top: 10px; bottom: 10px; width: 5px;';
-            case 'w': return baseStyle + 'w-resize; left: 0; top: 10px; bottom: 10px; width: 5px;';
-        }
-    }
-
-    startResize(windowId, direction, e) {
-        const window = this.windows.get(windowId);
-        const windowElement = window.element;
-        const startX = e.clientX;
-        const startY = e.clientY;
-        const startWidth = parseInt(window.getComputedStyle(windowElement).width);
-        const startHeight = parseInt(window.getComputedStyle(windowElement).height);
-        const startLeft = parseInt(windowElement.style.left);
-        const startTop = parseInt(windowElement.style.top);
-
-        function handleMouseMove(e) {
-            const deltaX = e.clientX - startX;
-            const deltaY = e.clientY - startY;
-
-            let newWidth = startWidth;
-            let newHeight = startHeight;
-            let newLeft = startLeft;
-            let newTop = startTop;
-
-            // 根据调整方向计算新尺寸和位置
-            if (direction.includes('e')) newWidth = startWidth + deltaX;
-            if (direction.includes('w')) {
-                newWidth = startWidth - deltaX;
-                newLeft = startLeft + deltaX;
-            }
-            if (direction.includes('s')) newHeight = startHeight + deltaY;
-            if (direction.includes('n')) {
-                newHeight = startHeight - deltaY;
-                newTop = startTop + deltaY;
-            }
-
-            // 最小尺寸限制
-            newWidth = Math.max(300, newWidth);
-            newHeight = Math.max(200, newHeight);
-
-            // 应用新尺寸和位置
-            windowElement.style.width = `${newWidth}px`;
-            windowElement.style.height = `${newHeight}px`;
-            if (direction.includes('w')) windowElement.style.left = `${newLeft}px`;
-            if (direction.includes('n')) windowElement.style.top = `${newTop}px`;
-        }
-
-        function handleMouseUp() {
-            document.removeEventListener('mousemove', handleMouseMove);
-            document.removeEventListener('mouseup', handleMouseUp);
-        }
-
-        document.addEventListener('mousemove', handleMouseMove);
-        document.addEventListener('mouseup', handleMouseUp);
-        e.preventDefault();
-    }
-
-    focusWindow(windowId) {
+        // 取消当前活动窗口
         if (this.activeWindow) {
-            this.activeWindow.style.zIndex = this.zIndexCounter - 50;
-        }
-
-        const window = this.windows.get(windowId);
-        if (window) {
-            window.element.style.zIndex = ++this.zIndexCounter;
-            this.activeWindow = window.element;
-            
-            // 更新任务栏按钮状态
-            this.updateTaskbarButtons(windowId);
-        }
-    }
-
-    minimizeWindow(windowId) {
-        const window = this.windows.get(windowId);
-        if (window) {
-            window.element.classList.add('minimized');
-            window.isMinimized = true;
-        }
-    }
-
-    restoreWindow(windowId) {
-        const window = this.windows.get(windowId);
-        if (window) {
-            window.element.classList.remove('minimized', 'maximized');
-            window.isMinimized = false;
-            window.isMaximized = false;
-            this.focusWindow(windowId);
-        }
-    }
-
-    toggleMaximizeWindow(windowId) {
-        const window = this.windows.get(windowId);
-        if (!window) return;
-
-        if (window.isMaximized) {
-            // 还原窗口
-            window.element.classList.remove('maximized');
-            window.element.style.width = `${window.originalSize.width}px`;
-            window.element.style.height = `${window.originalSize.height}px`;
-            window.element.style.left = `${window.originalPosition.x}px`;
-            window.element.style.top = `${window.originalPosition.y}px`;
-            window.isMaximized = false;
-        } else {
-            // 最大化窗口
-            window.originalSize.width = parseInt(window.element.style.width) || 400;
-            window.originalSize.height = parseInt(window.element.style.height) || 300;
-            window.originalPosition.x = parseInt(window.element.style.left) || 50;
-            window.originalPosition.y = parseInt(window.element.style.top) || 50;
-            
-            window.element.classList.add('maximized');
-            window.isMaximized = true;
-        }
-    }
-
-    closeWindow(windowId) {
-        const window = this.windows.get(windowId);
-        if (!window) return;
-
-        // 调用应用的 onUnmount 回调
-        if (window.app.onUnmount) {
-            window.app.onUnmount();
-        }
-
-        // 从DOM中移除
-        window.element.remove();
-
-        // 从管理器中移除
-        this.windows.delete(windowId);
-
-        // 从桌面运行应用中移除
-        for (const [appName, app] of desktop.runningApps) {
-            if (app.windowId === windowId) {
-                desktop.closeApp(appName);
-                break;
+            const activeElement = document.getElementById(this.activeWindow);
+            if (activeElement) {
+                activeElement.style.zIndex = activeElement.style.zIndex || this.windowsZIndex++;
             }
         }
-
-        // 如果是当前活动窗口，重置活动窗口
-        if (this.activeWindow === window.element) {
+        
+        // 激活新窗口
+        const windowElement = document.getElementById(windowId);
+        if (windowElement) {
+            windowElement.style.zIndex = this.windowsZIndex++;
+            this.activeWindow = windowId;
+            
+            // 如果窗口被最小化，则还原
+            if (this.windows[windowId].minimized) {
+                this.restoreWindow(windowId);
+            }
+            
+            // 更新任务栏状态
+            this.updateTaskbarState();
+        }
+    },
+    
+    minimizeWindow(windowId) {
+        const windowObj = this.windows[windowId];
+        if (!windowObj) return;
+        
+        windowObj.element.classList.add('minimized');
+        windowObj.minimized = true;
+        
+        // 如果这是当前活动窗口，寻找下一个活动窗口
+        if (this.activeWindow === windowId) {
+            this.findNextActiveWindow();
+        }
+        
+        this.updateTaskbarState();
+    },
+    
+    restoreWindow(windowId) {
+        const windowObj = this.windows[windowId];
+        if (!windowObj) return;
+        
+        windowObj.element.classList.remove('minimized');
+        windowObj.minimized = false;
+        
+        this.activateWindow(windowId);
+    },
+    
+    toggleMaximizeWindow(windowId) {
+        const windowObj = this.windows[windowId];
+        if (!windowObj) return;
+        
+        if (windowObj.maximized) {
+            // 还原窗口
+            windowObj.element.classList.remove('maximized');
+            windowObj.element.style.width = `${windowObj.width}px`;
+            windowObj.element.style.height = `${windowObj.height}px`;
+            windowObj.element.style.left = `${windowObj.x}px`;
+            windowObj.element.style.top = `${windowObj.y}px`;
+            windowObj.maximized = false;
+            
+            // 更新按钮图标
+            const maximizeBtn = windowObj.element.querySelector('.maximize i');
+            maximizeBtn.className = 'fas fa-square';
+        } else {
+            // 保存当前位置和大小
+            windowObj.width = windowObj.element.offsetWidth;
+            windowObj.height = windowObj.element.offsetHeight;
+            windowObj.x = windowObj.element.offsetLeft;
+            windowObj.y = windowObj.element.offsetTop;
+            
+            // 最大化窗口
+            windowObj.element.classList.add('maximized');
+            windowObj.maximized = true;
+            
+            // 更新按钮图标
+            const maximizeBtn = windowObj.element.querySelector('.maximize i');
+            maximizeBtn.className = 'fas fa-window-restore';
+        }
+    },
+    
+    closeWindow(windowId) {
+        const windowObj = this.windows[windowId];
+        if (!windowObj) return;
+        
+        // 调用关闭回调
+        if (windowObj.onClose) {
+            windowObj.onClose();
+        }
+        
+        // 移除DOM元素
+        windowObj.element.remove();
+        
+        // 从管理器中移除
+        delete this.windows[windowId];
+        
+        // 如果这是当前活动窗口，寻找下一个活动窗口
+        if (this.activeWindow === windowId) {
+            this.findNextActiveWindow();
+        }
+    },
+    
+    closeActiveWindow() {
+        if (this.activeWindow) {
+            this.closeWindow(this.activeWindow);
+        }
+    },
+    
+    findNextActiveWindow() {
+        const visibleWindows = Object.keys(this.windows).filter(id => 
+            !this.windows[id].minimized
+        );
+        
+        if (visibleWindows.length > 0) {
+            this.activateWindow(visibleWindows[visibleWindows.length - 1]);
+        } else {
             this.activeWindow = null;
         }
-    }
-
-    updateTaskbarButtons(activeWindowId) {
-        const taskbarButtons = document.querySelectorAll('.taskbar-app');
-        taskbarButtons.forEach(button => {
-            const appName = button.dataset.app;
-            const app = desktop.runningApps.get(appName);
+    },
+    
+    switchWindow() {
+        const windowIds = Object.keys(this.windows);
+        if (windowIds.length <= 1) return;
+        
+        const currentIndex = windowIds.indexOf(this.activeWindow);
+        const nextIndex = (currentIndex + 1) % windowIds.length;
+        this.activateWindow(windowIds[nextIndex]);
+    },
+    
+    updateTaskbarState() {
+        // 更新任务栏中应用的状态
+        Object.keys(this.windows).forEach(windowId => {
+            const windowObj = this.windows[windowId];
+            const taskbarApp = document.querySelector(`.taskbar-app[data-window-id="${windowId}"]`);
             
-            if (app && app.windowId === activeWindowId) {
-                button.classList.add('active');
-            } else {
-                button.classList.remove('active');
+            if (taskbarApp) {
+                taskbarApp.classList.toggle('active', this.activeWindow === windowId);
+                taskbarApp.classList.toggle('minimized', windowObj.minimized);
             }
         });
-    }
-
-    // 获取窗口信息
-    getWindow(windowId) {
-        return this.windows.get(windowId);
-    }
-
-    // 获取所有窗口
+    },
+    
+    getWindowContent(windowId) {
+        const windowObj = this.windows[windowId];
+        return windowObj ? windowObj.element.querySelector('.window-content') : null;
+    },
+    
+    setWindowTitle(windowId, title) {
+        const windowObj = this.windows[windowId];
+        if (windowObj) {
+            const titleElement = windowObj.element.querySelector('.window-title span');
+            if (titleElement) {
+                titleElement.textContent = title;
+            }
+            windowObj.title = title;
+        }
+    },
+    
     getAllWindows() {
-        return Array.from(this.windows.values());
+        return this.windows;
+    },
+    
+    getActiveWindow() {
+        return this.activeWindow;
     }
-
-    // 切换到下一个窗口 (Alt+Tab)
-    switchToNextWindow() {
-        const windows = this.getAllWindows();
-        if (windows.length === 0) return;
-
-        const currentIndex = windows.findIndex(w => w.element === this.activeWindow);
-        const nextIndex = (currentIndex + 1) % windows.length;
-        const nextWindow = windows[nextIndex];
-        
-        this.focusWindow(parseInt(nextWindow.element.dataset.windowId));
-    }
-} 
+}; 
