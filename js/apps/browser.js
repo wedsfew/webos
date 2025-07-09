@@ -13,13 +13,14 @@ class BrowserApp {
         this.history = [];
         this.historyIndex = -1;
         this.bookmarks = JSON.parse(localStorage.getItem('webos_browser_bookmarks') || '[]');
-        this.homepage = 'http://localhost:8000/test.html';
+        this.homepage = 'http://localhost:9000/proxy?url=https://www.baidu.com';
         
         this.defaultBookmarks = [
+            { name: '百度(代理)', url: 'http://localhost:9000/proxy?url=https://www.baidu.com' },
+            { name: 'Google(代理)', url: 'http://localhost:9000/proxy?url=https://www.google.com' },
+            { name: '知乎(代理)', url: 'http://localhost:9000/proxy?url=https://www.zhihu.com' },
             { name: '测试页面', url: 'http://localhost:8000/test.html' },
             { name: '功能说明', url: 'http://localhost:8000/iframe-info.html' },
-            { name: 'Example', url: 'https://example.com' },
-            { name: '百度', url: 'https://www.baidu.com' },
             { name: 'GitHub', url: 'https://github.com' },
             { name: 'MDN', url: 'https://developer.mozilla.org' }
         ];
