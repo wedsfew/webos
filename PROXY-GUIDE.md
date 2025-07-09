@@ -8,7 +8,7 @@ Web桌面系统已集成代理功能，让用户能够通过本地代理服务�
 
 ```
 用户 → Web桌面系统 → 浏览器应用 → 代理服务器 → 外部网站
-     (localhost:8080)  (iframe)    (localhost:9999)  (internet)
+     (localhost:8089)  (iframe)    (localhost:9999)  (internet)
 ```
 
 ## 启动方式
@@ -17,12 +17,12 @@ Web桌面系统已集成代理功能，让用户能够通过本地代理服务�
 ```bash
 python3 start_servers.py
 ```
-自动启动web服务器(8080)和代理服务器(9999)
+自动启动web服务器(8089)和代理服务器(9999)
 
 ### 方式二：手动启动
 ```bash
 # 启动web服务器
-python3 -m http.server 8080 &
+python3 -m http.server 8089 &
 
 # 启动代理服务器
 python3 simple_proxy.py &
@@ -62,7 +62,7 @@ python3 start_servers.py
 ```
 
 ### 2. 访问桌面系统
-在浏览器中打开: `http://localhost:8080`
+在浏览器中打开: `http://localhost:8089`
 
 ### 3. 使用浏览器应用
 1. 点击桌面上的"浏览器"图标

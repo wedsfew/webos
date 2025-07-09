@@ -7,7 +7,7 @@
 - **前端**: HTML5 + CSS3 + Vanilla JavaScript
 - **后端**: PHP (用于文件操作API)
 - **服务器**: Python HTTP Server (开发环境)
-- **访问地址**: http://localhost:8080
+- **访问地址**: http://localhost:8089
 
 ## 桌面基础功能测试 ✅
 

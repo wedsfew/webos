@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>浏览器功能测试</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background-color: #f0f0f0;
+        }
+        .test-container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            text-align: center;
+        }
+        .test-section {
+            margin: 20px 0;
+            padding: 20px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
+        .test-section h2 {
+            color: #666;
+            margin-top: 0;
+        }
+        button {
+            background-color: #007cba;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover {
+            background-color: #005a8b;
+        }
+        .iframe-container {
+            margin-top: 20px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            overflow: hidden;
+            height: 500px;
+        }
+        .iframe-container iframe {
+            width: 100%;
+            height: 100%;
+            border: none;
+        }
+        .url-bar {
+            width: 100%;
+            padding: 10px;
+            border: 2px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+            margin-bottom: 10px;
+        }
+        .url-bar:focus {
+            border-color: #007cba;
+            outline: none;
+        }
+        .status {
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 4px;
+            font-weight: bold;
+        }
+        .status.success {
+            background-color: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        .status.error {
+            background-color: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+    </style>
+</head>
+<body>
+    <div class="test-container">
+        <h1>🌐 浏览器功能测试</h1>
+        
+        <div class="test-section">
+            <h2>📡 服务状态</h2>
+            <div id="status-display" class="status success">
+                ✅ Web服务器: http://localhost:8089<br>
+                ✅ 代理服务器: http://localhost:9999
+            </div>
+        </div>
+        
+        <div class="test-section">
+            <h2>🔍 网址导航</h2>
+            <input type="text" class="url-bar" id="url-input" 
+                   placeholder="输入网址 (如: baidu.com, google.com)" 
+                   value="https://www.baidu.com">
+            <button onclick="loadUrl()">访问</button>
+            <button onclick="loadUrlDirect()">直接访问</button>
+            <button onclick="loadUrlProxy()">代理访问</button>
+        </div>
+        
+        <div class="test-section">
+            <h2>🚀 快速访问</h2>
+            <button onclick="quickLoad('https://www.baidu.com')">百度</button>
+            <button onclick="quickLoad('https://www.google.com')">Google</button>
+            <button onclick="quickLoad('https://github.com')">GitHub</button>
+            <button onclick="quickLoad('https://stackoverflow.com')">Stack Overflow</button>
+            <button onclick="quickLoad('https://httpbin.org/get')">HTTPBin GET</button>
+            <button onclick="quickLoad('https://httpbin.org/post')">HTTPBin POST</button>
+        </div>
+        
+        <div class="test-section">
+            <h2>📋 测试表单</h2>
+            <button onclick="loadFormTest()">加载表单测试页面</button>
+            <button onclick="loadDebugTest()">加载调试测试页面</button>
+        </div>
+        
+        <div class="iframe-container">
+            <iframe id="test-iframe" sandbox="allow-same-origin allow-scripts allow-forms allow-popups"></iframe>
+        </div>
+        
+        <div class="test-section">
+            <h2>📊 调试信息</h2>
+            <div id="debug-info" style="background: #f8f9fa; padding: 10px; border-radius: 4px; font-family: monospace; font-size: 12px;">
+                等待操作...
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const iframe = document.getElementById('test-iframe');
+        const urlInput = document.getElementById('url-input');
+        const debugInfo = document.getElementById('debug-info');
+        
+        // 更新调试信息
+        function updateDebug(message) {
+            const timestamp = new Date().toLocaleTimeString();
+            debugInfo.innerHTML += `[${timestamp}] ${message}\n`;
+            debugInfo.scrollTop = debugInfo.scrollHeight;
+        }
+        
+        // 加载URL
+        function loadUrl() {
+            const url = urlInput.value.trim();
+            if (!url) {
+                alert('请输入网址');
+                return;
+            }
+            
+            updateDebug(`尝试加载: ${url}`);
+            
+            // 检查是否需要代理
+            if (shouldUseProxy(url)) {
+                const proxyUrl = getProxyUrl(url);
+                updateDebug(`使用代理: ${url} -> ${proxyUrl}`);
+                iframe.src = proxyUrl;
+            } else {
+                updateDebug(`直接访问: ${url}`);
+                iframe.src = url;
+            }
+        }
+        
+        // 直接访问（不使用代理）
+        function loadUrlDirect() {
+            const url = urlInput.value.trim();
+            if (!url) {
+                alert('请输入网址');
+                return;
+            }
+            
+            updateDebug(`直接访问: ${url}`);
+            iframe.src = url;
+        }
+        
+        // 强制使用代理
+        function loadUrlProxy() {
+            const url = urlInput.value.trim();
+            if (!url) {
+                alert('请输入网址');
+                return;
+            }
+            
+            const proxyUrl = getProxyUrl(url);
+            updateDebug(`强制代理: ${url} -> ${proxyUrl}`);
+            iframe.src = proxyUrl;
+        }
+        
+        // 快速加载
+        function quickLoad(url) {
+            urlInput.value = url;
+            loadUrl();
+        }
+        
+        // 加载表单测试
+        function loadFormTest() {
+            const url = 'http://localhost:8089/form-test.html';
+            updateDebug(`加载表单测试: ${url}`);
+            iframe.src = url;
+        }
+        
+        // 加载调试测试
+        function loadDebugTest() {
+            const url = 'http://localhost:8089/debug-test.html';
+            updateDebug(`加载调试测试: ${url}`);
+            iframe.src = url;
+        }
+        
+        // 判断是否需要使用代理
+        function shouldUseProxy(url) {
+            if (url.startsWith('about:') || 
+                url.startsWith('data:') || 
+                url.startsWith('blob:') ||
+                url.startsWith('javascript:') ||
+                url.includes('localhost:8089') ||
+                url.includes('localhost:9999')) {
+                return false;
+            }
+            return url.startsWith('http://') || url.startsWith('https://');
+        }
+        
+        // 获取代理URL
+        function getProxyUrl(url) {
+            const proxyBaseUrl = 'http://localhost:9999/proxy';
+            return `${proxyBaseUrl}?url=${encodeURIComponent(url)}`;
+        }
+        
+        // iframe加载事件
+        iframe.addEventListener('load', function() {
+            updateDebug(`iframe加载完成: ${iframe.src}`);
+        });
+        
+        iframe.addEventListener('error', function() {
+            updateDebug(`iframe加载失败: ${iframe.src}`);
+        });
+        
+        // 页面加载完成
+        window.addEventListener('load', function() {
+            updateDebug('页面加载完成，开始测试...');
+            
+            // 自动加载一个测试页面
+            setTimeout(() => {
+                quickLoad('https://www.baidu.com');
+            }, 1000);
+        });
+        
+        // 回车键导航
+        urlInput.addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                loadUrl();
+            }
+        });
+    </script>
+</body>
+</html> 

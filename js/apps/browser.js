@@ -71,10 +71,12 @@ class BrowserApp {
             this.updateUI();
         });
         
-        // 监听来自iframe的消息（代理页面导航）
+        // 监听来自iframe的消息（代理页面导航和表单提交）
         window.addEventListener('message', (event) => {
             if (event.data && event.data.type === 'navigate') {
                 this.loadUrl(event.data.url);
+            } else if (event.data && event.data.type === 'submit-form') {
+                this.handleFormSubmission(event.data);
             }
         });
         
@@ -125,8 +127,10 @@ class BrowserApp {
             // 检查是否需要使用代理
             if (this.shouldUseProxy(url)) {
                 const proxyUrl = this.getProxyUrl(url);
+                console.log('使用代理访问:', url, '->', proxyUrl);
                 iframe.src = proxyUrl;
             } else {
+                console.log('直接访问:', url);
                 iframe.src = url;
             }
             
@@ -134,6 +138,7 @@ class BrowserApp {
             this.showLoadingState();
             
         } catch (error) {
+            console.error('加载URL错误:', error);
             this.showErrorPage(error.message);
         }
     }
@@ -165,8 +170,10 @@ class BrowserApp {
         // 检查是否需要使用代理
         if (this.shouldUseProxy(url)) {
             const proxyUrl = this.getProxyUrl(url);
+            console.log('从历史记录使用代理访问:', url, '->', proxyUrl);
             iframe.src = proxyUrl;
         } else {
+            console.log('从历史记录直接访问:', url);
             iframe.src = url;
         }
         
@@ -363,7 +370,7 @@ class BrowserApp {
             url.startsWith('data:') || 
             url.startsWith('blob:') ||
             url.startsWith('javascript:') ||
-            url.includes('localhost:8080') ||
+                            url.includes('localhost:8089') ||
             url.includes('localhost:9999')) {
             return false;
         }
@@ -385,6 +392,94 @@ class BrowserApp {
             return true; // 如果没有抛出错误，说明服务器在运行
         } catch {
             return false;
+        }
+    }
+    
+    async handleFormSubmission(formData) {
+        // 处理表单提交
+        console.log('处理表单提交:', formData);
+        
+        try {
+            const { method, url, data } = formData;
+            
+            // 检查是否需要使用代理
+            if (this.shouldUseProxy(url)) {
+                const proxyUrl = this.getProxyUrl(url);
+                console.log('表单提交到代理:', url, '->', proxyUrl);
+                
+                // 使用fetch API发送请求到代理服务器
+                const fetchOptions = {
+                    method: method,
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded',
+                        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36'
+                    }
+                };
+                
+                // 如果有数据，转换为URL编码格式
+                if (data && Object.keys(data).length > 0) {
+                    const params = new URLSearchParams();
+                    for (const [key, value] of Object.entries(data)) {
+                        if (value !== null && value !== undefined) {
+                            params.append(key, value.toString());
+                        }
+                    }
+                    fetchOptions.body = params.toString();
+                    console.log('表单数据:', fetchOptions.body);
+                }
+                
+                // 显示加载状态
+                this.showLoadingState();
+                
+                // 发送请求
+                console.log('发送请求:', method, proxyUrl);
+                const response = await fetch(proxyUrl, fetchOptions);
+                
+                console.log('响应状态:', response.status, response.statusText);
+                
+                if (response.ok) {
+                    // 获取响应内容
+                    const content = await response.text();
+                    console.log('响应内容长度:', content.length);
+                    
+                    // 创建新的页面显示结果
+                    const blob = new Blob([content], { type: 'text/html' });
+                    const resultUrl = URL.createObjectURL(blob);
+                    
+                    // 更新URL栏和历史记录
+                    this.currentUrl = url;
+                    this.updateUrlBar(url);
+                    
+                    // 加载结果页面
+                    const windowContent = WindowManager.getWindowContent(this.windowId);
+                    const iframe = windowContent.querySelector('#browser-iframe');
+                    iframe.src = resultUrl;
+                    
+                    console.log('表单提交成功，已加载结果页面');
+                    
+                } else {
+                    console.error('HTTP错误:', response.status, response.statusText);
+                    throw new Error(`HTTP错误: ${response.status} - ${response.statusText}`);
+                }
+                
+            } else {
+                // 本地URL直接提交（虽然这种情况很少见）
+                console.log('本地URL直接提交:', url);
+                this.loadUrl(url);
+            }
+            
+        } catch (error) {
+            console.error('表单提交失败:', error);
+            this.showErrorPage(`表单提交失败: ${error.message}`);
+        }
+    }
+    
+    updateUrlBar(url) {
+        // 更新URL栏显示
+        const content = WindowManager.getWindowContent(this.windowId);
+        const urlBar = content.querySelector('#url-bar');
+        if (urlBar) {
+            urlBar.value = url;
         }
     }
     

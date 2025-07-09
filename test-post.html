@@ -1,0 +1,353 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HTTP方法测试页面</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            text-align: center;
+        }
+        .test-section {
+            margin: 30px 0;
+            padding: 20px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
+        .test-section h2 {
+            color: #666;
+            margin-top: 0;
+        }
+        .form-group {
+            margin: 15px 0;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        input[type="text"], input[type="url"], select, textarea {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+        button {
+            background-color: #007cba;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        button:hover {
+            background-color: #005a8b;
+        }
+        .result {
+            margin-top: 20px;
+            padding: 15px;
+            background-color: #f8f9fa;
+            border-radius: 4px;
+            border-left: 4px solid #007cba;
+        }
+        .error {
+            border-left-color: #dc3545;
+            background-color: #f8d7da;
+        }
+        .success {
+            border-left-color: #28a745;
+            background-color: #d4edda;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🧪 HTTP方法测试页面</h1>
+        
+        <div class="test-section">
+            <h2>📡 代理服务器状态检查</h2>
+            <button onclick="checkProxyStatus()">检查代理状态</button>
+            <div id="proxy-status" class="result" style="display: none;"></div>
+        </div>
+        
+        <div class="test-section">
+            <h2>🔍 GET请求测试</h2>
+            <div class="form-group">
+                <label for="get-url">目标URL:</label>
+                <input type="url" id="get-url" value="https://www.baidu.com" placeholder="输入要测试的URL">
+            </div>
+            <button onclick="testGet()">发送GET请求</button>
+            <div id="get-result" class="result" style="display: none;"></div>
+        </div>
+        
+        <div class="test-section">
+            <h2>📝 POST请求测试</h2>
+            <div class="form-group">
+                <label for="post-url">目标URL:</label>
+                <input type="url" id="post-url" value="https://httpbin.org/post" placeholder="输入要测试的URL">
+            </div>
+            <div class="form-group">
+                <label for="post-data">POST数据 (JSON格式):</label>
+                <textarea id="post-data" rows="4" placeholder='{"name": "test", "value": "123"}'></textarea>
+            </div>
+            <button onclick="testPost()">发送POST请求</button>
+            <div id="post-result" class="result" style="display: none;"></div>
+        </div>
+        
+        <div class="test-section">
+            <h2>🔧 其他HTTP方法测试</h2>
+            <div class="form-group">
+                <label for="method-select">HTTP方法:</label>
+                <select id="method-select">
+                    <option value="PUT">PUT</option>
+                    <option value="DELETE">DELETE</option>
+                    <option value="PATCH">PATCH</option>
+                    <option value="HEAD">HEAD</option>
+                    <option value="OPTIONS">OPTIONS</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label for="method-url">目标URL:</label>
+                <input type="url" id="method-url" value="https://httpbin.org/put" placeholder="输入要测试的URL">
+            </div>
+            <div class="form-group">
+                <label for="method-data">请求数据 (可选):</label>
+                <textarea id="method-data" rows="3" placeholder='{"key": "value"}'></textarea>
+            </div>
+            <button onclick="testMethod()">发送请求</button>
+            <div id="method-result" class="result" style="display: none;"></div>
+        </div>
+        
+        <div class="test-section">
+            <h2>📋 表单提交测试</h2>
+            <form id="test-form" onsubmit="return false;">
+                <div class="form-group">
+                    <label for="form-action">表单Action URL:</label>
+                    <input type="url" id="form-action" value="https://httpbin.org/post" placeholder="表单提交地址">
+                </div>
+                <div class="form-group">
+                    <label for="form-method">表单方法:</label>
+                    <select id="form-method">
+                        <option value="POST">POST</option>
+                        <option value="GET">GET</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="form-name">姓名:</label>
+                    <input type="text" id="form-name" name="name" value="张三" placeholder="输入姓名">
+                </div>
+                <div class="form-group">
+                    <label for="form-email">邮箱:</label>
+                    <input type="text" id="form-email" name="email" value="zhangsan@example.com" placeholder="输入邮箱">
+                </div>
+                <button type="button" onclick="testFormSubmit()">提交表单</button>
+            </form>
+            <div id="form-result" class="result" style="display: none;"></div>
+        </div>
+    </div>
+
+    <script>
+        const PROXY_BASE_URL = 'http://localhost:9999/proxy';
+        
+        // 检查代理状态
+        async function checkProxyStatus() {
+            const resultDiv = document.getElementById('proxy-status');
+            resultDiv.style.display = 'block';
+            resultDiv.innerHTML = '🔄 检查中...';
+            resultDiv.className = 'result';
+            
+            try {
+                const response = await fetch('http://localhost:9999/');
+                if (response.ok) {
+                    const text = await response.text();
+                    resultDiv.innerHTML = '✅ 代理服务器运行正常！<br>支持的HTTP方法: GET, POST, PUT, DELETE, PATCH, HEAD, OPTIONS';
+                    resultDiv.className = 'result success';
+                } else {
+                    throw new Error(`HTTP ${response.status}`);
+                }
+            } catch (error) {
+                resultDiv.innerHTML = `❌ 代理服务器连接失败: ${error.message}`;
+                resultDiv.className = 'result error';
+            }
+        }
+        
+        // 测试GET请求
+        async function testGet() {
+            const url = document.getElementById('get-url').value;
+            const resultDiv = document.getElementById('get-result');
+            
+            if (!url) {
+                alert('请输入URL');
+                return;
+            }
+            
+            resultDiv.style.display = 'block';
+            resultDiv.innerHTML = '🔄 发送GET请求...';
+            resultDiv.className = 'result';
+            
+            try {
+                const proxyUrl = `${PROXY_BASE_URL}?url=${encodeURIComponent(url)}`;
+                const response = await fetch(proxyUrl);
+                
+                if (response.ok) {
+                    const text = await response.text();
+                    resultDiv.innerHTML = `✅ GET请求成功！<br>响应长度: ${text.length} 字符<br>内容类型: ${response.headers.get('Content-Type')}`;
+                    resultDiv.className = 'result success';
+                } else {
+                    throw new Error(`HTTP ${response.status}`);
+                }
+            } catch (error) {
+                resultDiv.innerHTML = `❌ GET请求失败: ${error.message}`;
+                resultDiv.className = 'result error';
+            }
+        }
+        
+        // 测试POST请求
+        async function testPost() {
+            const url = document.getElementById('post-url').value;
+            const data = document.getElementById('post-data').value;
+            const resultDiv = document.getElementById('post-result');
+            
+            if (!url) {
+                alert('请输入URL');
+                return;
+            }
+            
+            resultDiv.style.display = 'block';
+            resultDiv.innerHTML = '🔄 发送POST请求...';
+            resultDiv.className = 'result';
+            
+            try {
+                const proxyUrl = `${PROXY_BASE_URL}?url=${encodeURIComponent(url)}`;
+                const response = await fetch(proxyUrl, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: data || '{}'
+                });
+                
+                if (response.ok) {
+                    const text = await response.text();
+                    resultDiv.innerHTML = `✅ POST请求成功！<br>响应长度: ${text.length} 字符<br>状态码: ${response.status}`;
+                    resultDiv.className = 'result success';
+                } else {
+                    throw new Error(`HTTP ${response.status}`);
+                }
+            } catch (error) {
+                resultDiv.innerHTML = `❌ POST请求失败: ${error.message}`;
+                resultDiv.className = 'result error';
+            }
+        }
+        
+        // 测试其他HTTP方法
+        async function testMethod() {
+            const method = document.getElementById('method-select').value;
+            const url = document.getElementById('method-url').value;
+            const data = document.getElementById('method-data').value;
+            const resultDiv = document.getElementById('method-result');
+            
+            if (!url) {
+                alert('请输入URL');
+                return;
+            }
+            
+            resultDiv.style.display = 'block';
+            resultDiv.innerHTML = `🔄 发送${method}请求...`;
+            resultDiv.className = 'result';
+            
+            try {
+                const proxyUrl = `${PROXY_BASE_URL}?url=${encodeURIComponent(url)}`;
+                const options = {
+                    method: method,
+                    headers: {
+                        'Content-Type': 'application/json',
+                    }
+                };
+                
+                if (data && ['PUT', 'PATCH', 'POST'].includes(method)) {
+                    options.body = data;
+                }
+                
+                const response = await fetch(proxyUrl, options);
+                
+                if (response.ok) {
+                    const text = await response.text();
+                    resultDiv.innerHTML = `✅ ${method}请求成功！<br>状态码: ${response.status}<br>响应长度: ${text.length} 字符`;
+                    resultDiv.className = 'result success';
+                } else {
+                    throw new Error(`HTTP ${response.status}`);
+                }
+            } catch (error) {
+                resultDiv.innerHTML = `❌ ${method}请求失败: ${error.message}`;
+                resultDiv.className = 'result error';
+            }
+        }
+        
+        // 测试表单提交
+        async function testFormSubmit() {
+            const action = document.getElementById('form-action').value;
+            const method = document.getElementById('form-method').value;
+            const name = document.getElementById('form-name').value;
+            const email = document.getElementById('form-email').value;
+            const resultDiv = document.getElementById('form-result');
+            
+            if (!action) {
+                alert('请输入表单Action URL');
+                return;
+            }
+            
+            resultDiv.style.display = 'block';
+            resultDiv.innerHTML = '🔄 提交表单...';
+            resultDiv.className = 'result';
+            
+            try {
+                const proxyUrl = `${PROXY_BASE_URL}?url=${encodeURIComponent(action)}`;
+                const formData = new URLSearchParams();
+                formData.append('name', name);
+                formData.append('email', email);
+                
+                const response = await fetch(proxyUrl, {
+                    method: method,
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded',
+                    },
+                    body: formData
+                });
+                
+                if (response.ok) {
+                    const text = await response.text();
+                    resultDiv.innerHTML = `✅ 表单提交成功！<br>方法: ${method}<br>状态码: ${response.status}<br>响应长度: ${text.length} 字符`;
+                    resultDiv.className = 'result success';
+                } else {
+                    throw new Error(`HTTP ${response.status}`);
+                }
+            } catch (error) {
+                resultDiv.innerHTML = `❌ 表单提交失败: ${error.message}`;
+                resultDiv.className = 'result error';
+            }
+        }
+        
+        // 页面加载时自动检查代理状态
+        window.addEventListener('load', function() {
+            checkProxyStatus();
+        });
+    </script>
+</body>
+</html> 

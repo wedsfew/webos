@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>导航测试页面</title>
+    <style>
+        body {
+            font-family: 'Microsoft YaHei', Arial, sans-serif;
+            margin: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .test-section {
+            margin: 20px 0;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
+        .log-container {
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 5px;
+            padding: 15px;
+            height: 300px;
+            overflow-y: auto;
+            font-family: monospace;
+            font-size: 12px;
+            margin-top: 20px;
+        }
+        .iframe-container {
+            border: 2px solid #007bff;
+            border-radius: 5px;
+            margin: 20px 0;
+            height: 500px;
+        }
+        iframe {
+            width: 100%;
+            height: 100%;
+            border: none;
+        }
+        .button {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        .button:hover {
+            background: #0056b3;
+        }
+        .status {
+            padding: 10px;
+            border-radius: 5px;
+            margin: 10px 0;
+        }
+        .status.success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        .status.error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🌐 导航功能测试</h1>
+        
+        <div class="test-section">
+            <h2>测试说明</h2>
+            <p>此页面用于测试代理导航功能。点击下方的链接，观察日志输出和iframe导航。</p>
+            
+            <div class="status success">
+                ✅ 代理服务器状态: <span id="proxy-status">检查中...</span>
+            </div>
+        </div>
+        
+        <div class="test-section">
+            <h2>快速导航测试</h2>
+            <button class="button" onclick="testNavigation('https://github.com/login')">GitHub登录页面</button>
+            <button class="button" onclick="testNavigation('https://github.com/signup')">GitHub注册页面</button>
+            <button class="button" onclick="testNavigation('https://www.google.com')">Google搜索</button>
+            <button class="button" onclick="testNavigation('https://www.baidu.com')">百度搜索</button>
+        </div>
+        
+        <div class="iframe-container">
+            <iframe id="test-iframe" src="about:blank"></iframe>
+        </div>
+        
+        <div class="test-section">
+            <h2>实时日志</h2>
+            <button class="button" onclick="clearLog()">清空日志</button>
+            <div id="log-container" class="log-container"></div>
+        </div>
+    </div>
+
+    <script>
+        const iframe = document.getElementById('test-iframe');
+        const logContainer = document.getElementById('log-container');
+        const proxyStatus = document.getElementById('proxy-status');
+        
+        // 添加日志
+        function addLog(message) {
+            const timestamp = new Date().toLocaleTimeString();
+            const logEntry = document.createElement('div');
+            logEntry.innerHTML = `[${timestamp}] ${message}`;
+            logContainer.appendChild(logEntry);
+            logContainer.scrollTop = logContainer.scrollHeight;
+        }
+        
+        // 清空日志
+        function clearLog() {
+            logContainer.innerHTML = '';
+            addLog('日志已清空...');
+        }
+        
+        // 测试导航
+        function testNavigation(url) {
+            addLog(`开始测试导航: ${url}`);
+            
+            try {
+                // 检查是否需要使用代理
+                if (shouldUseProxy(url)) {
+                    const proxyUrl = getProxyUrl(url);
+                    addLog(`使用代理导航: ${url} -> ${proxyUrl}`);
+                    iframe.src = proxyUrl;
+                } else {
+                    addLog(`直接导航: ${url}`);
+                    iframe.src = url;
+                }
+            } catch (error) {
+                addLog(`导航失败: ${error.message}`);
+            }
+        }
+        
+        // 判断是否需要使用代理
+        function shouldUseProxy(url) {
+            if (url.startsWith('about:') || 
+                url.startsWith('data:') || 
+                url.startsWith('blob:') ||
+                url.startsWith('javascript:') ||
+                url.includes('localhost:8089') ||
+                url.includes('localhost:9999')) {
+                return false;
+            }
+            return url.startsWith('http://') || url.startsWith('https://');
+        }
+        
+        // 获取代理URL
+        function getProxyUrl(url) {
+            const proxyBaseUrl = 'http://localhost:9999/proxy';
+            return `${proxyBaseUrl}?url=${encodeURIComponent(url)}`;
+        }
+        
+        // 检查代理服务器状态
+        async function checkProxyStatus() {
+            try {
+                const response = await fetch('http://localhost:9999/');
+                if (response.ok) {
+                    proxyStatus.textContent = '运行正常';
+                    proxyStatus.style.color = '#155724';
+                    addLog('✅ 代理服务器连接正常');
+                } else {
+                    proxyStatus.textContent = '连接失败';
+                    proxyStatus.style.color = '#721c24';
+                    addLog('❌ 代理服务器连接失败');
+                }
+            } catch (error) {
+                proxyStatus.textContent = '无法连接';
+                proxyStatus.style.color = '#721c24';
+                addLog(`❌ 代理服务器检查失败: ${error.message}`);
+            }
+        }
+        
+        // 监听来自iframe的消息
+        window.addEventListener('message', function(event) {
+            if (event.data && event.data.type === 'navigate') {
+                addLog(`收到导航消息: ${event.data.url}`);
+                
+                // 处理导航
+                try {
+                    const url = event.data.url;
+                    if (url && url !== iframe.src) {
+                        addLog(`正在导航到: ${url}`);
+                        
+                        if (shouldUseProxy(url)) {
+                            const proxyUrl = getProxyUrl(url);
+                            addLog(`使用代理导航: ${url} -> ${proxyUrl}`);
+                            iframe.src = proxyUrl;
+                        } else {
+                            addLog(`直接导航: ${url}`);
+                            iframe.src = url;
+                        }
+                    }
+                } catch (error) {
+                    addLog(`导航处理失败: ${error.message}`);
+                }
+            } else if (event.data && event.data.type === 'submit-form') {
+                addLog(`收到表单提交消息:`);
+                addLog(`  方法: ${event.data.method}`);
+                addLog(`  URL: ${event.data.url}`);
+                addLog(`  数据: ${JSON.stringify(event.data.data, null, 2)}`);
+            }
+        });
+        
+        // iframe加载事件
+        iframe.addEventListener('load', function() {
+            addLog(`iframe加载完成: ${iframe.src}`);
+        });
+        
+        // 初始化
+        addLog('导航测试页面已加载');
+        checkProxyStatus();
+    </script>
+</body>
+</html> 

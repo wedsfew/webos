@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GitHub登录测试</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            text-align: center;
+        }
+        .test-section {
+            margin: 20px 0;
+            padding: 20px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
+        .test-section h2 {
+            color: #666;
+            margin-top: 0;
+        }
+        button {
+            background-color: #007cba;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover {
+            background-color: #005a8b;
+        }
+        .iframe-container {
+            margin-top: 20px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            overflow: hidden;
+            height: 600px;
+        }
+        .iframe-container iframe {
+            width: 100%;
+            height: 100%;
+            border: none;
+        }
+        .log-container {
+            margin-top: 20px;
+            padding: 15px;
+            background-color: #f8f9fa;
+            border-radius: 4px;
+            border-left: 4px solid #007cba;
+            font-family: monospace;
+            font-size: 12px;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+        .status {
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 4px;
+            font-weight: bold;
+        }
+        .status.success {
+            background-color: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        .status.error {
+            background-color: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        .status.info {
+            background-color: #d1ecf1;
+            color: #0c5460;
+            border: 1px solid #bee5eb;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔐 GitHub登录测试</h1>
+        
+        <div class="test-section">
+            <h2>📡 测试说明</h2>
+            <div class="status info">
+                <strong>测试目的:</strong> 验证GitHub登录表单是否被正确拦截和处理<br>
+                <strong>测试步骤:</strong> 点击下方按钮加载GitHub登录页面，然后尝试登录<br>
+                <strong>预期结果:</strong> 表单提交应该被拦截并通过代理处理，而不是直接提交
+            </div>
+        </div>
+        
+        <div class="test-section">
+            <h2>🚀 加载GitHub登录页面</h2>
+            <button onclick="loadGitHubLogin()">加载GitHub登录页面</button>
+            <button onclick="loadGitHubSignup()">加载GitHub注册页面</button>
+            <button onclick="clearLog()">清空日志</button>
+        </div>
+        
+        <div class="iframe-container">
+            <iframe id="test-iframe" sandbox="allow-same-origin allow-scripts allow-forms allow-popups"></iframe>
+        </div>
+        
+        <div class="test-section">
+            <h2>📊 调试日志</h2>
+            <div id="log-container" class="log-container">
+                等待操作...
+            </div>
+        </div>
+        
+        <div class="test-section">
+            <h2>🔧 手动测试</h2>
+            <button onclick="testFormSubmit()">测试表单提交</button>
+            <button onclick="testDirectProxy()">测试直接代理</button>
+            <div id="manual-test-result" class="status" style="display: none;"></div>
+        </div>
+    </div>
+
+    <script>
+        const iframe = document.getElementById('test-iframe');
+        const logContainer = document.getElementById('log-container');
+        const manualTestResult = document.getElementById('manual-test-result');
+        
+        // 添加日志
+        function addLog(message) {
+            const timestamp = new Date().toLocaleTimeString();
+            logContainer.innerHTML += `[${timestamp}] ${message}\n`;
+            logContainer.scrollTop = logContainer.scrollHeight;
+        }
+        
+        // 清空日志
+        function clearLog() {
+            logContainer.innerHTML = '日志已清空...\n';
+        }
+        
+        // 加载GitHub登录页面
+        function loadGitHubLogin() {
+            addLog('正在加载GitHub登录页面...');
+            const proxyUrl = 'http://localhost:9999/proxy?url=https://github.com/login';
+            iframe.src = proxyUrl;
+        }
+        
+        // 加载GitHub注册页面
+        function loadGitHubSignup() {
+            addLog('正在加载GitHub注册页面...');
+            const proxyUrl = 'http://localhost:9999/proxy?url=https://github.com/signup';
+            iframe.src = proxyUrl;
+        }
+        
+        // 测试表单提交
+        async function testFormSubmit() {
+            addLog('测试表单提交...');
+            manualTestResult.style.display = 'block';
+            manualTestResult.className = 'status info';
+            manualTestResult.innerHTML = '正在测试表单提交...';
+            
+            try {
+                const proxyUrl = 'http://localhost:9999/proxy?url=https://httpbin.org/post';
+                const formData = new URLSearchParams();
+                formData.append('username', 'testuser');
+                formData.append('password', 'testpass');
+                formData.append('login', 'Sign in');
+                
+                const response = await fetch(proxyUrl, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded',
+                        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36'
+                    },
+                    body: formData
+                });
+                
+                if (response.ok) {
+                    const text = await response.text();
+                    addLog(`表单提交测试成功! 响应长度: ${text.length} 字符`);
+                    manualTestResult.className = 'status success';
+                    manualTestResult.innerHTML = `✅ 表单提交测试成功!<br>状态码: ${response.status}<br>响应长度: ${text.length} 字符`;
+                } else {
+                    throw new Error(`HTTP ${response.status}`);
+                }
+            } catch (error) {
+                addLog(`表单提交测试失败: ${error.message}`);
+                manualTestResult.className = 'status error';
+                manualTestResult.innerHTML = `❌ 表单提交测试失败: ${error.message}`;
+            }
+        }
+        
+        // 测试直接代理
+        async function testDirectProxy() {
+            addLog('测试直接代理访问...');
+            manualTestResult.style.display = 'block';
+            manualTestResult.className = 'status info';
+            manualTestResult.innerHTML = '正在测试直接代理...';
+            
+            try {
+                const proxyUrl = 'http://localhost:9999/proxy?url=https://github.com/login';
+                const response = await fetch(proxyUrl);
+                
+                if (response.ok) {
+                    const text = await response.text();
+                    addLog(`直接代理测试成功! 响应长度: ${text.length} 字符`);
+                    manualTestResult.className = 'status success';
+                    manualTestResult.innerHTML = `✅ 直接代理测试成功!<br>状态码: ${response.status}<br>响应长度: ${text.length} 字符`;
+                } else {
+                    throw new Error(`HTTP ${response.status}`);
+                }
+            } catch (error) {
+                addLog(`直接代理测试失败: ${error.message}`);
+                manualTestResult.className = 'status error';
+                manualTestResult.innerHTML = `❌ 直接代理测试失败: ${error.message}`;
+            }
+        }
+        
+        // 监听来自iframe的消息
+        window.addEventListener('message', function(event) {
+            if (event.data && event.data.type === 'navigate') {
+                addLog(`收到导航消息: ${event.data.url}`);
+                
+                // 处理导航 - 在iframe中加载新页面
+                try {
+                    const url = event.data.url;
+                    if (url && url !== iframe.src) {
+                        addLog(`正在导航到: ${url}`);
+                        
+                        // 检查是否需要使用代理
+                        if (shouldUseProxy(url)) {
+                            const proxyUrl = getProxyUrl(url);
+                            addLog(`使用代理导航: ${url} -> ${proxyUrl}`);
+                            iframe.src = proxyUrl;
+                        } else {
+                            addLog(`直接导航: ${url}`);
+                            iframe.src = url;
+                        }
+                    }
+                } catch (error) {
+                    addLog(`导航处理失败: ${error.message}`);
+                }
+            } else if (event.data && event.data.type === 'submit-form') {
+                addLog(`收到表单提交消息:`);
+                addLog(`  方法: ${event.data.method}`);
+                addLog(`  URL: ${event.data.url}`);
+                addLog(`  数据: ${JSON.stringify(event.data.data, null, 2)}`);
+                
+                // 模拟表单提交处理
+                handleFormSubmission(event.data);
+            }
+        });
+        
+        // 判断是否需要使用代理
+        function shouldUseProxy(url) {
+            if (url.startsWith('about:') || 
+                url.startsWith('data:') || 
+                url.startsWith('blob:') ||
+                url.startsWith('javascript:') ||
+                url.includes('localhost:8089') ||
+                url.includes('localhost:9999')) {
+                return false;
+            }
+            return url.startsWith('http://') || url.startsWith('https://');
+        }
+        
+        // 获取代理URL
+        function getProxyUrl(url) {
+            const proxyBaseUrl = 'http://localhost:9999/proxy';
+            return `${proxyBaseUrl}?url=${encodeURIComponent(url)}`;
+        }
+        
+        // 处理表单提交
+        async function handleFormSubmission(formData) {
+            addLog('开始处理表单提交...');
+            
+            try {
+                const { method, url, data } = formData;
+                const proxyUrl = `http://localhost:9999/proxy?url=${encodeURIComponent(url)}`;
+                
+                addLog(`提交到代理: ${url} -> ${proxyUrl}`);
+                
+                const fetchOptions = {
+                    method: method,
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded',
+                        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36'
+                    }
+                };
+                
+                if (data && Object.keys(data).length > 0) {
+                    const params = new URLSearchParams();
+                    for (const [key, value] of Object.entries(data)) {
+                        if (value !== null && value !== undefined) {
+                            params.append(key, value.toString());
+                        }
+                    }
+                    fetchOptions.body = params.toString();
+                    addLog(`表单数据: ${fetchOptions.body}`);
+                }
+                
+                const response = await fetch(proxyUrl, fetchOptions);
+                addLog(`响应状态: ${response.status} ${response.statusText}`);
+                
+                if (response.ok) {
+                    const content = await response.text();
+                    addLog(`响应内容长度: ${content.length} 字符`);
+                    
+                    // 创建新的页面显示结果
+                    const blob = new Blob([content], { type: 'text/html' });
+                    const resultUrl = URL.createObjectURL(blob);
+                    iframe.src = resultUrl;
+                    
+                    addLog('表单提交处理完成，已加载结果页面');
+                } else {
+                    throw new Error(`HTTP错误: ${response.status} - ${response.statusText}`);
+                }
+                
+            } catch (error) {
+                addLog(`表单提交处理失败: ${error.message}`);
+            }
+        }
+        
+        // iframe加载事件
+        iframe.addEventListener('load', function() {
+            addLog(`iframe加载完成: ${iframe.src}`);
+        });
+        
+        iframe.addEventListener('error', function() {
+            addLog(`iframe加载失败: ${iframe.src}`);
+        });
+        
+        // 页面加载完成
+        window.addEventListener('load', function() {
+            addLog('GitHub登录测试页面加载完成');
+        });
+    </script>
+</body>
+</html> 

@@ -112,13 +112,13 @@ testwebos/
 python3 start_servers.py
 
 # 方法2: 手动启动
-python3 -m http.server 8080 &
+python3 -m http.server 8089 &
 python3 simple_proxy.py &
 ```
 
 ### 使用步骤
-1. 启动服务器（8080端口：Web，9999端口：代理）
-2. 访问 `http://localhost:8080`
+1. 启动服务器（8089端口：Web，9999端口：代理）
+2. 访问 `http://localhost:8089`
 3. 打开浏览器应用
 4. 确认代理状态为"代理已启用"
 5. 输入任意外部网址进行测试
@@ -194,11 +194,11 @@ python3 simple_proxy.py &
 #### 3. 端口占用错误
 ```bash
 # 查找占用端口的进程
-lsof -ti:8080
+lsof -ti:8089
 lsof -ti:9999
 
 # 杀死占用进程
-lsof -ti:8080 | xargs kill -9
+lsof -ti:8089 | xargs kill -9
 lsof -ti:9999 | xargs kill -9
 ```
 

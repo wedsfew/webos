@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>表单提交测试</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 600px;
+            margin: 50px auto;
+            padding: 20px;
+            background-color: #f0f0f0;
+        }
+        .form-container {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .form-group {
+            margin-bottom: 20px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+            color: #555;
+        }
+        input[type="text"], input[type="email"], textarea, select {
+            width: 100%;
+            padding: 10px;
+            border: 2px solid #ddd;
+            border-radius: 5px;
+            font-size: 16px;
+            box-sizing: border-box;
+        }
+        input[type="text"]:focus, input[type="email"]:focus, textarea:focus, select:focus {
+            border-color: #4CAF50;
+            outline: none;
+        }
+        button {
+            background-color: #4CAF50;
+            color: white;
+            padding: 12px 30px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            width: 100%;
+            margin-top: 10px;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+        .test-links {
+            margin-top: 30px;
+            text-align: center;
+        }
+        .test-links a {
+            display: inline-block;
+            margin: 10px;
+            padding: 10px 20px;
+            background-color: #007cba;
+            color: white;
+            text-decoration: none;
+            border-radius: 5px;
+        }
+        .test-links a:hover {
+            background-color: #005a8b;
+        }
+    </style>
+</head>
+<body>
+    <div class="form-container">
+        <h1>📝 表单提交测试</h1>
+        
+        <form action="https://httpbin.org/post" method="POST">
+            <div class="form-group">
+                <label for="name">姓名:</label>
+                <input type="text" id="name" name="name" value="张三" required>
+            </div>
+            
+            <div class="form-group">
+                <label for="email">邮箱:</label>
+                <input type="email" id="email" name="email" value="zhangsan@example.com" required>
+            </div>
+            
+            <div class="form-group">
+                <label for="message">留言:</label>
+                <textarea id="message" name="message" rows="4" placeholder="请输入您的留言...">这是一个测试留言。</textarea>
+            </div>
+            
+            <div class="form-group">
+                <label for="category">分类:</label>
+                <select id="category" name="category">
+                    <option value="general">一般咨询</option>
+                    <option value="technical">技术支持</option>
+                    <option value="feedback">意见反馈</option>
+                </select>
+            </div>
+            
+            <button type="submit">提交表单 (POST)</button>
+        </form>
+        
+        <form action="https://httpbin.org/get" method="GET" style="margin-top: 30px;">
+            <div class="form-group">
+                <label for="search">搜索关键词:</label>
+                <input type="text" id="search" name="q" value="测试搜索" placeholder="输入搜索关键词">
+            </div>
+            
+            <button type="submit">搜索提交 (GET)</button>
+        </form>
+        
+        <div class="test-links">
+            <h3>测试链接：</h3>
+            <a href="https://www.baidu.com" target="_self">访问百度</a>
+            <a href="https://www.google.com" target="_self">访问Google</a>
+            <a href="https://github.com" target="_self">访问GitHub</a>
+        </div>
+    </div>
+    
+    <script>
+        // 监听表单提交事件
+        document.addEventListener('DOMContentLoaded', function() {
+            const forms = document.querySelectorAll('form');
+            
+            forms.forEach(form => {
+                form.addEventListener('submit', function(e) {
+                    console.log('表单提交:', {
+                        action: form.action,
+                        method: form.method,
+                        data: new FormData(form)
+                    });
+                    
+                    // 显示提交状态
+                    const button = form.querySelector('button[type="submit"]');
+                    const originalText = button.textContent;
+                    button.textContent = '提交中...';
+                    button.disabled = true;
+                    
+                    // 模拟提交过程
+                    setTimeout(() => {
+                        button.textContent = originalText;
+                        button.disabled = false;
+                    }, 3000);
+                });
+            });
+        });
+    </script>
+</body>
+</html> 
