@@ -13,15 +13,15 @@ class BrowserApp {
         this.history = [];
         this.historyIndex = -1;
         this.bookmarks = JSON.parse(localStorage.getItem('webos_browser_bookmarks') || '[]');
-        this.homepage = 'https://www.baidu.com';
+        this.homepage = 'http://localhost:8000/test.html';
         
         this.defaultBookmarks = [
+            { name: '测试页面', url: 'http://localhost:8000/test.html' },
+            { name: '功能说明', url: 'http://localhost:8000/iframe-info.html' },
+            { name: 'Example', url: 'https://example.com' },
             { name: '百度', url: 'https://www.baidu.com' },
-            { name: 'Google', url: 'https://www.google.com' },
             { name: 'GitHub', url: 'https://github.com' },
-            { name: 'MDN', url: 'https://developer.mozilla.org' },
-            { name: '网易', url: 'https://www.163.com' },
-            { name: '知乎', url: 'https://www.zhihu.com' }
+            { name: 'MDN', url: 'https://developer.mozilla.org' }
         ];
         
         if (this.bookmarks.length === 0) {
@@ -156,14 +156,14 @@ class BrowserApp {
         if (!this.windowElement) return;
 
         // 导航按钮
-        windowElement.querySelector('#back-btn').addEventListener('click', () => this.goBack());
-        windowElement.querySelector('#forward-btn').addEventListener('click', () => this.goForward());
-        windowElement.querySelector('#refresh-btn').addEventListener('click', () => this.refresh());
-        windowElement.querySelector('#home-btn').addEventListener('click', () => this.goHome());
+        this.windowElement.querySelector('#back-btn').addEventListener('click', () => this.goBack());
+        this.windowElement.querySelector('#forward-btn').addEventListener('click', () => this.goForward());
+        this.windowElement.querySelector('#refresh-btn').addEventListener('click', () => this.refresh());
+        this.windowElement.querySelector('#home-btn').addEventListener('click', () => this.goHome());
 
         // 地址栏
-        const addressBar = windowElement.querySelector('#address-bar');
-        const goBtn = windowElement.querySelector('#go-btn');
+        const addressBar = this.windowElement.querySelector('#address-bar');
+        const goBtn = this.windowElement.querySelector('#go-btn');
         
         addressBar.addEventListener('keypress', (e) => {
             if (e.key === 'Enter') {
@@ -176,37 +176,35 @@ class BrowserApp {
         });
 
         // 书签功能
-        windowElement.querySelector('#bookmark-btn').addEventListener('click', () => this.addCurrentPageToBookmarks());
-        windowElement.querySelector('#bookmarks-btn').addEventListener('click', () => this.showBookmarkDialog());
-        windowElement.querySelector('#history-btn').addEventListener('click', () => this.showHistoryDialog());
+        this.windowElement.querySelector('#bookmark-btn').addEventListener('click', () => this.addCurrentPageToBookmarks());
+        this.windowElement.querySelector('#bookmarks-btn').addEventListener('click', () => this.showBookmarkDialog());
+        this.windowElement.querySelector('#history-btn').addEventListener('click', () => this.showHistoryDialog());
 
         // 书签栏点击
-        windowElement.querySelectorAll('.bookmark-item').forEach(item => {
+        this.windowElement.querySelectorAll('.bookmark-item').forEach(item => {
             item.addEventListener('click', () => {
                 this.navigate(item.dataset.url);
             });
         });
 
         // iframe加载事件
-        const iframe = windowElement.querySelector('#browser-frame');
+        const iframe = this.windowElement.querySelector('#browser-frame');
         iframe.addEventListener('load', () => this.onPageLoad());
         iframe.addEventListener('error', () => this.onPageError());
 
         // 对话框关闭
-        windowElement.querySelector('#close-bookmark-dialog')?.addEventListener('click', () => {
-            windowElement.querySelector('#bookmark-dialog').style.display = 'none';
+        this.windowElement.querySelector('#close-bookmark-dialog')?.addEventListener('click', () => {
+            this.windowElement.querySelector('#bookmark-dialog').style.display = 'none';
         });
         
-        windowElement.querySelector('#close-history-dialog')?.addEventListener('click', () => {
-            windowElement.querySelector('#history-dialog').style.display = 'none';
+        this.windowElement.querySelector('#close-history-dialog')?.addEventListener('click', () => {
+            this.windowElement.querySelector('#history-dialog').style.display = 'none';
         });
 
         // 添加书签
-        windowElement.querySelector('#add-bookmark')?.addEventListener('click', () => {
+        this.windowElement.querySelector('#add-bookmark')?.addEventListener('click', () => {
             this.addBookmark();
         });
-
-        this.windowElement = windowElement;
     }
 
     navigate(url) {
