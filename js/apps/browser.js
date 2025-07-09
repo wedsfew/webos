@@ -22,8 +22,8 @@ class BrowserApp {
             { name: '微博', url: 'https://weibo.com' },
             { name: 'GitHub', url: 'https://github.com' },
             { name: 'MDN', url: 'https://developer.mozilla.org' },
-            { name: '测试页面', url: 'http://localhost:8000/test.html' },
-            { name: '功能说明', url: 'http://localhost:8000/iframe-info.html' }
+            { name: '链接测试', url: 'http://localhost:8000/link-test.html' },
+            { name: '自动代理说明', url: 'http://localhost:8000/auto-proxy-test.html' }
         ];
         
         // 重置书签到新的默认配置（移除旧的代理书签）
@@ -195,6 +195,9 @@ class BrowserApp {
         const iframe = this.windowElement.querySelector('#browser-frame');
         iframe.addEventListener('load', () => this.onPageLoad());
         iframe.addEventListener('error', () => this.onPageError());
+        
+        // 拦截iframe内的链接点击（通过事件冒泡）
+        this.setupLinkInterception();
 
         // 对话框关闭
         this.windowElement.querySelector('#close-bookmark-dialog')?.addEventListener('click', () => {
@@ -290,6 +293,70 @@ class BrowserApp {
             bookmark.url.includes('localhost:9000/proxy') || 
             bookmark.name.includes('(代理)')
         );
+    }
+
+    /**
+     * 设置链接拦截
+     */
+    setupLinkInterception() {
+        // 监听来自iframe的消息
+        window.addEventListener('message', (event) => {
+            // 确保消息来源安全
+            if (event.origin !== window.location.origin && 
+                !event.origin.startsWith('http://localhost:9000')) {
+                return;
+            }
+            
+            // 处理链接点击消息
+            if (event.data && event.data.type === 'linkClick') {
+                const url = event.data.url;
+                console.log('拦截到链接点击:', url);
+                
+                // 阻止iframe导航，改为在当前浏览器窗口中导航
+                this.navigate(url);
+            }
+        });
+        
+        // 监听iframe的src变化（作为备用方案）
+        const iframe = this.windowElement.querySelector('#browser-frame');
+        let lastSrc = iframe.src;
+        
+        const checkSrcChange = () => {
+            if (iframe.src !== lastSrc && iframe.src !== 'about:blank') {
+                // 检查是否是用户点击链接导致的导航
+                const newUrl = this.extractUrlFromProxy(iframe.src);
+                if (newUrl && newUrl !== this.currentUrl) {
+                    console.log('检测到iframe导航:', newUrl);
+                    // 更新地址栏和历史记录
+                    this.currentUrl = newUrl;
+                    const addressBar = this.windowElement.querySelector('#address-bar');
+                    addressBar.value = newUrl;
+                    this.addToHistory(newUrl);
+                    this.updateNavButtons();
+                    this.updateSecurityIndicator(newUrl);
+                    this.updateProxyStatus(this.shouldUseProxy(newUrl));
+                }
+                lastSrc = iframe.src;
+            }
+        };
+        
+        // 定期检查src变化
+        setInterval(checkSrcChange, 500);
+    }
+    
+    /**
+     * 从代理URL中提取原始URL
+     */
+    extractUrlFromProxy(proxyUrl) {
+        if (proxyUrl.includes('localhost:9000/proxy?url=')) {
+            try {
+                const urlParam = proxyUrl.split('localhost:9000/proxy?url=')[1];
+                return decodeURIComponent(urlParam);
+            } catch (e) {
+                return null;
+            }
+        }
+        return proxyUrl;
     }
 
     /**

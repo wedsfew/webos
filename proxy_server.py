@@ -107,6 +107,10 @@ class ProxyRequestHandler(http.server.BaseHTTPRequestHandler):
                 
                 self.end_headers()
                 
+                # 如果是HTML内容，注入链接拦截JavaScript
+                if 'text/html' in response.headers.get('content-type', '').lower():
+                    content = self.inject_link_interception(content)
+                
                 # 发送内容
                 self.wfile.write(content)
                 
@@ -116,6 +120,138 @@ class ProxyRequestHandler(http.server.BaseHTTPRequestHandler):
             self.send_error(500, f"URL Error: {e.reason}")
         except Exception as e:
             self.send_error(500, f"Proxy Error: {str(e)}")
+    
+    def inject_link_interception(self, content):
+        """在HTML内容中注入链接拦截JavaScript"""
+        try:
+            # 解码内容
+            if isinstance(content, bytes):
+                html_content = content.decode('utf-8', errors='ignore')
+            else:
+                html_content = content
+            
+            # JavaScript代码用于拦截链接点击
+            injection_script = """
+<script>
+(function() {
+    'use strict';
+    
+    // 等待页面加载完成
+    function setupLinkInterception() {
+        // 拦截所有链接点击
+        document.addEventListener('click', function(event) {
+            const target = event.target.closest('a');
+            if (target && target.href) {
+                // 检查是否是外部链接或需要特殊处理的链接
+                const href = target.href;
+                
+                // 排除一些特殊情况
+                if (href.startsWith('javascript:') || 
+                    href.startsWith('mailto:') || 
+                    href.startsWith('tel:') ||
+                    href.startsWith('#')) {
+                    return; // 让这些链接正常工作
+                }
+                
+                // 阻止默认行为
+                event.preventDefault();
+                event.stopPropagation();
+                
+                // 通过postMessage发送给父窗口
+                try {
+                    window.parent.postMessage({
+                        type: 'linkClick',
+                        url: href,
+                        text: target.textContent || target.innerText || '',
+                        timestamp: Date.now()
+                    }, '*');
+                    
+                    console.log('发送链接点击消息:', href);
+                } catch (e) {
+                    console.error('发送链接点击消息失败:', e);
+                    // 如果postMessage失败，尝试直接导航
+                    window.location.href = href;
+                }
+            }
+        }, true);
+        
+        // 拦截表单提交（如搜索表单）
+        document.addEventListener('submit', function(event) {
+            const form = event.target;
+            if (form && form.action) {
+                event.preventDefault();
+                
+                // 构建表单提交URL
+                const formData = new FormData(form);
+                const params = new URLSearchParams(formData);
+                const method = form.method.toLowerCase();
+                
+                let submitUrl = form.action;
+                if (method === 'get' && params.toString()) {
+                    submitUrl += (submitUrl.includes('?') ? '&' : '?') + params.toString();
+                }
+                
+                // 发送给父窗口
+                try {
+                    window.parent.postMessage({
+                        type: 'linkClick',
+                        url: submitUrl,
+                        text: 'Form Submit',
+                        timestamp: Date.now()
+                    }, '*');
+                    
+                    console.log('发送表单提交消息:', submitUrl);
+                } catch (e) {
+                    console.error('发送表单提交消息失败:', e);
+                    window.location.href = submitUrl;
+                }
+            }
+        }, true);
+    }
+    
+    // 如果页面已加载完成，立即设置
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', setupLinkInterception);
+    } else {
+        setupLinkInterception();
+    }
+    
+    // 监听动态内容变化
+    if (window.MutationObserver) {
+        const observer = new MutationObserver(function(mutations) {
+            mutations.forEach(function(mutation) {
+                if (mutation.type === 'childList' && mutation.addedNodes.length > 0) {
+                    // 新增节点可能包含链接，重新设置拦截
+                    setupLinkInterception();
+                }
+            });
+        });
+        
+        observer.observe(document.body || document.documentElement, {
+            childList: true,
+            subtree: true
+        });
+    }
+})();
+</script>
+"""
+            
+            # 尝试在</head>之前插入，如果没有head标签则在<body>之前插入
+            if '</head>' in html_content:
+                html_content = html_content.replace('</head>', injection_script + '\n</head>')
+            elif '<body>' in html_content:
+                html_content = html_content.replace('<body>', injection_script + '\n<body>')
+            elif '<html>' in html_content:
+                html_content = html_content.replace('<html>', '<html>' + injection_script)
+            else:
+                # 如果都没有，直接在开头添加
+                html_content = injection_script + '\n' + html_content
+            
+            return html_content.encode('utf-8')
+            
+        except Exception as e:
+            print(f"链接拦截脚本注入失败: {e}")
+            return content
     
     def send_proxy_info(self):
         """发送代理服务说明页面"""
