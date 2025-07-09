@@ -570,6 +570,17 @@
     color: #666;
 }
 
+.proxy-indicator {
+    font-size: 14px;
+    margin-left: 8px;
+    transition: all 0.2s;
+    cursor: default;
+}
+
+.proxy-indicator:hover {
+    transform: scale(1.1);
+}
+
 .security-indicator {
     font-size: 14px;
 }

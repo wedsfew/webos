@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebOS浏览器 - 自动代理功能测试</title>
+    <style>
+        body {
+            font-family: 'Microsoft YaHei', Arial, sans-serif;
+            line-height: 1.6;
+            margin: 0;
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            min-height: 100vh;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border-radius: 15px;
+            padding: 30px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+        }
+        h1 {
+            text-align: center;
+            margin-bottom: 30px;
+            font-size: 2.8em;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+        .feature-highlight {
+            background: rgba(40, 167, 69, 0.2);
+            border: 2px solid #28a745;
+            border-radius: 10px;
+            padding: 25px;
+            margin: 25px 0;
+            text-align: center;
+        }
+        .test-section {
+            background: rgba(23, 162, 184, 0.2);
+            border: 2px solid #17a2b8;
+            border-radius: 10px;
+            padding: 25px;
+            margin: 25px 0;
+        }
+        .demo-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+            margin: 25px 0;
+        }
+        .demo-card {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+            padding: 20px;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+        .test-link {
+            background: rgba(255, 255, 255, 0.2);
+            color: white;
+            text-decoration: none;
+            padding: 12px 24px;
+            border-radius: 25px;
+            margin: 10px;
+            display: inline-block;
+            transition: all 0.3s;
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            font-weight: bold;
+        }
+        .test-link:hover {
+            background: rgba(255, 255, 255, 0.3);
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+        }
+        .success {
+            color: #28a745;
+            font-weight: bold;
+        }
+        .info {
+            color: #17a2b8;
+            font-weight: bold;
+        }
+        .warning {
+            color: #ffc107;
+            font-weight: bold;
+        }
+        code {
+            background: rgba(0, 0, 0, 0.3);
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-family: 'Consolas', 'Monaco', monospace;
+        }
+        .step-list {
+            counter-reset: step-counter;
+        }
+        .step-list li {
+            counter-increment: step-counter;
+            margin: 15px 0;
+            padding-left: 10px;
+        }
+        .step-list li::marker {
+            content: "步骤 " counter(step-counter) ": ";
+            font-weight: bold;
+            color: #ffc107;
+        }
+        .indicator-demo {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin: 10px 0;
+            padding: 10px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 8px;
+        }
+        .visual-indicator {
+            font-size: 18px;
+            padding: 5px;
+            border-radius: 4px;
+            background: rgba(255, 255, 255, 0.2);
+        }
+        .comparison-table {
+            width: 100%;
+            margin: 20px 0;
+            border-collapse: collapse;
+        }
+        .comparison-table th,
+        .comparison-table td {
+            padding: 12px;
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            text-align: left;
+        }
+        .comparison-table th {
+            background: rgba(255, 255, 255, 0.2);
+            font-weight: bold;
+        }
+        .comparison-table tr:nth-child(even) {
+            background: rgba(255, 255, 255, 0.05);
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🚀 WebOS浏览器自动代理功能</h1>
+        
+        <div class="feature-highlight">
+            <h2>✨ 新功能：智能自动代理</h2>
+            <p class="success">现在浏览器会自动检测外部网站并通过代理访问，无需手动添加代理前缀！</p>
+            <p>只需要输入正常的网址，系统会自动处理代理访问。</p>
+        </div>
+
+        <div class="test-section">
+            <h3>🔧 功能特性</h3>
+            <div class="demo-grid">
+                <div class="demo-card">
+                    <h4>🤖 智能检测</h4>
+                    <p>自动识别外部网站（非localhost）并使用代理访问</p>
+                </div>
+                <div class="demo-card">
+                    <h4>🎯 用户友好</h4>
+                    <p>地址栏显示原始URL，用户体验更自然</p>
+                </div>
+                <div class="demo-card">
+                    <h4>🔄 可视化指示器</h4>
+                    <p>状态栏显示当前是否使用代理</p>
+                </div>
+                <div class="demo-card">
+                    <h4>⚡ 无缝切换</h4>
+                    <p>本地网站直接访问，外部网站自动代理</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="test-section">
+            <h3>📋 使用说明</h3>
+            <ol class="step-list">
+                <li>打开WebOS浏览器应用</li>
+                <li>在地址栏直接输入网址，例如：<code>www.baidu.com</code></li>
+                <li>系统自动检测并使用代理访问</li>
+                <li>观察状态栏的代理指示器</li>
+                <li>享受无障碍的网页浏览体验</li>
+            </ol>
+        </div>
+
+        <div class="test-section">
+            <h3>🎨 状态指示器说明</h3>
+            <div class="indicator-demo">
+                <span class="visual-indicator">🔄</span>
+                <div>
+                    <strong class="success">代理模式</strong> - 正在通过代理服务器访问外部网站
+                    <br><small>用于访问被X-Frame-Options限制的网站</small>
+                </div>
+            </div>
+            <div class="indicator-demo">
+                <span class="visual-indicator">🔗</span>
+                <div>
+                    <strong class="info">直接模式</strong> - 直接访问本地或兼容的网站
+                    <br><small>用于访问localhost或允许iframe嵌入的网站</small>
+                </div>
+            </div>
+        </div>
+
+        <div class="test-section">
+            <h3>📊 自动代理规则</h3>
+            <table class="comparison-table">
+                <thead>
+                    <tr>
+                        <th>URL类型</th>
+                        <th>访问方式</th>
+                        <th>示例</th>
+                        <th>状态指示器</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>外部HTTPS网站</td>
+                        <td class="success">自动代理</td>
+                        <td><code>https://www.baidu.com</code></td>
+                        <td>🔄</td>
+                    </tr>
+                    <tr>
+                        <td>外部HTTP网站</td>
+                        <td class="success">自动代理</td>
+                        <td><code>http://example.com</code></td>
+                        <td>🔄</td>
+                    </tr>
+                    <tr>
+                        <td>本地服务器</td>
+                        <td class="info">直接访问</td>
+                        <td><code>http://localhost:8000</code></td>
+                        <td>🔗</td>
+                    </tr>
+                    <tr>
+                        <td>搜索关键词</td>
+                        <td class="success">自动转为百度搜索（代理）</td>
+                        <td><code>WebOS桌面系统</code></td>
+                        <td>🔄</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <div class="test-section">
+            <h3>🧪 快速测试链接</h3>
+            <p>点击以下链接在WebOS浏览器中测试自动代理功能：</p>
+            
+            <h4 class="success">🔄 需要代理的网站（自动启用）</h4>
+            <a href="https://www.baidu.com" class="test-link" target="_blank">百度首页</a>
+            <a href="https://www.google.com" class="test-link" target="_blank">Google搜索</a>
+            <a href="https://www.zhihu.com" class="test-link" target="_blank">知乎</a>
+            <a href="https://weibo.com" class="test-link" target="_blank">微博</a>
+            <a href="https://github.com" class="test-link" target="_blank">GitHub</a>
+            
+            <h4 class="info">🔗 直接访问的本地资源</h4>
+            <a href="http://localhost:8000/test.html" class="test-link" target="_blank">本地测试页</a>
+            <a href="http://localhost:8000/iframe-info.html" class="test-link" target="_blank">iframe说明</a>
+            <a href="http://localhost:9000/" class="test-link" target="_blank">代理服务器状态</a>
+        </div>
+
+        <div class="test-section">
+            <h3>💡 技术原理</h3>
+            <p><strong>智能检测算法：</strong></p>
+            <ul>
+                <li>检查URL是否包含 <code>localhost</code> 或 <code>127.0.0.1</code></li>
+                <li>检查URL是否已经是代理地址</li>
+                <li>对于外部URL，自动转换为：<br>
+                    <code>http://localhost:9000/proxy?url=原始网址</code></li>
+                <li>保持地址栏显示原始URL，用户无感知</li>
+            </ul>
+            
+            <p><strong class="warning">重要提醒：</strong></p>
+            <ul>
+                <li>代理服务器必须运行在端口9000</li>
+                <li>首次访问某些网站可能需要等待几秒钟</li>
+                <li>部分网站可能有额外的安全限制</li>
+            </ul>
+        </div>
+
+        <div class="test-section">
+            <h3>🔍 故障排除</h3>
+            <p><strong>如果网站无法加载：</strong></p>
+            <ol>
+                <li>检查代理服务器是否运行：访问 <code>http://localhost:9000</code></li>
+                <li>查看浏览器状态栏的代理指示器</li>
+                <li>等待页面完全加载（某些网站较慢）</li>
+                <li>刷新页面重试</li>
+            </ol>
+        </div>
+
+        <p style="text-align: center; margin-top: 40px; font-size: 1.2em;">
+            🎉 现在享受无障碍的网页浏览体验吧！
+        </p>
+    </div>
+
+    <script>
+        // 检测代理服务器状态
+        async function checkProxyStatus() {
+            try {
+                const response = await fetch('http://localhost:9000/');
+                if (response.ok) {
+                    console.log('✅ 代理服务器运行正常');
+                } else {
+                    console.warn('⚠️ 代理服务器响应异常');
+                }
+            } catch (error) {
+                console.error('❌ 代理服务器未启动或无法访问');
+            }
+        }
+
+        // 页面加载完成后检测
+        window.addEventListener('load', function() {
+            checkProxyStatus();
+            console.log('🚀 自动代理功能测试页面已加载');
+        });
+    </script>
+</body>
+</html> 

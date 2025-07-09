@@ -13,19 +13,21 @@ class BrowserApp {
         this.history = [];
         this.historyIndex = -1;
         this.bookmarks = JSON.parse(localStorage.getItem('webos_browser_bookmarks') || '[]');
-        this.homepage = 'http://localhost:9000/proxy?url=https://www.baidu.com';
+        this.homepage = 'https://www.baidu.com';
         
         this.defaultBookmarks = [
-            { name: '百度(代理)', url: 'http://localhost:9000/proxy?url=https://www.baidu.com' },
-            { name: 'Google(代理)', url: 'http://localhost:9000/proxy?url=https://www.google.com' },
-            { name: '知乎(代理)', url: 'http://localhost:9000/proxy?url=https://www.zhihu.com' },
-            { name: '测试页面', url: 'http://localhost:8000/test.html' },
-            { name: '功能说明', url: 'http://localhost:8000/iframe-info.html' },
+            { name: '百度', url: 'https://www.baidu.com' },
+            { name: 'Google', url: 'https://www.google.com' },
+            { name: '知乎', url: 'https://www.zhihu.com' },
+            { name: '微博', url: 'https://weibo.com' },
             { name: 'GitHub', url: 'https://github.com' },
-            { name: 'MDN', url: 'https://developer.mozilla.org' }
+            { name: 'MDN', url: 'https://developer.mozilla.org' },
+            { name: '测试页面', url: 'http://localhost:8000/test.html' },
+            { name: '功能说明', url: 'http://localhost:8000/iframe-info.html' }
         ];
         
-        if (this.bookmarks.length === 0) {
+        // 重置书签到新的默认配置（移除旧的代理书签）
+        if (this.bookmarks.length === 0 || this.needsBookmarkUpdate()) {
             this.bookmarks = [...this.defaultBookmarks];
             this.saveBookmarks();
         }
@@ -104,6 +106,7 @@ class BrowserApp {
                 
                 <div class="browser-status" id="browser-status">
                     <span class="status-text">就绪</span>
+                    <span class="proxy-indicator" id="proxy-indicator" title="代理状态"></span>
                     <span class="security-indicator" id="security-indicator"></span>
                 </div>
             </div>
@@ -219,7 +222,7 @@ class BrowserApp {
             if (processedUrl.includes('.') || processedUrl.includes('localhost')) {
                 processedUrl = 'https://' + processedUrl;
             } else {
-                // 当作搜索关键词
+                // 当作搜索关键词，使用百度搜索
                 processedUrl = `https://www.baidu.com/s?wd=${encodeURIComponent(processedUrl)}`;
             }
         }
@@ -227,16 +230,20 @@ class BrowserApp {
         this.showLoading();
         this.currentUrl = processedUrl;
         
-        // 更新地址栏
+        // 更新地址栏（显示原始URL）
         const addressBar = this.windowElement.querySelector('#address-bar');
         addressBar.value = processedUrl;
         
         // 添加到历史记录
         this.addToHistory(processedUrl);
         
+        // 决定是否使用代理
+        const actualUrl = this.shouldUseProxy(processedUrl) ? 
+            this.getProxyUrl(processedUrl) : processedUrl;
+        
         // 加载页面
         const iframe = this.windowElement.querySelector('#browser-frame');
-        iframe.src = processedUrl;
+        iframe.src = actualUrl;
         
         // 更新窗口标题
         const titleElement = this.windowElement.querySelector('.window-title');
@@ -244,6 +251,67 @@ class BrowserApp {
         
         this.updateNavButtons();
         this.updateSecurityIndicator(processedUrl);
+        
+        // 显示是否使用代理的状态
+        this.updateProxyStatus(this.shouldUseProxy(processedUrl));
+    }
+
+    /**
+     * 判断是否应该使用代理
+     */
+    shouldUseProxy(url) {
+        // 本地地址不使用代理
+        if (url.includes('localhost') || url.includes('127.0.0.1')) {
+            return false;
+        }
+        
+        // 已经是代理URL的不再使用代理
+        if (url.includes('localhost:9000/proxy')) {
+            return false;
+        }
+        
+        // 其他外部URL都使用代理
+        return url.startsWith('http://') || url.startsWith('https://');
+    }
+
+    /**
+     * 获取代理URL
+     */
+    getProxyUrl(originalUrl) {
+        return `http://localhost:9000/proxy?url=${encodeURIComponent(originalUrl)}`;
+    }
+
+    /**
+     * 检查是否需要更新书签（移除旧的代理书签）
+     */
+    needsBookmarkUpdate() {
+        // 检查是否有旧的代理书签格式
+        return this.bookmarks.some(bookmark => 
+            bookmark.url.includes('localhost:9000/proxy') || 
+            bookmark.name.includes('(代理)')
+        );
+    }
+
+    /**
+     * 更新代理状态显示
+     */
+    updateProxyStatus(isUsingProxy) {
+        const statusText = this.windowElement.querySelector('.status-text');
+        const proxyIndicator = this.windowElement.querySelector('#proxy-indicator');
+        
+        if (isUsingProxy) {
+            statusText.textContent = '正在加载（使用代理）...';
+            statusText.style.color = '#28a745';
+            proxyIndicator.textContent = '🔄';
+            proxyIndicator.title = '正在使用代理访问';
+            proxyIndicator.style.color = '#28a745';
+        } else {
+            statusText.textContent = '正在加载...';
+            statusText.style.color = '';
+            proxyIndicator.textContent = '🔗';
+            proxyIndicator.title = '直接访问';
+            proxyIndicator.style.color = '#6c757d';
+        }
     }
 
     navigateToHomepage() {
@@ -281,11 +349,16 @@ class BrowserApp {
         const addressBar = this.windowElement.querySelector('#address-bar');
         addressBar.value = url;
         
+        // 决定是否使用代理
+        const actualUrl = this.shouldUseProxy(url) ? 
+            this.getProxyUrl(url) : url;
+        
         const iframe = this.windowElement.querySelector('#browser-frame');
-        iframe.src = url;
+        iframe.src = actualUrl;
         
         this.updateNavButtons();
         this.showLoading();
+        this.updateProxyStatus(this.shouldUseProxy(url));
     }
 
     addToHistory(url) {
@@ -342,8 +415,24 @@ class BrowserApp {
             if (titleElement) titleElement.textContent = `浏览器 - ${this.currentUrl}`;
         }
         
+        // 显示页面加载完成状态，包含代理信息
         const statusText = this.windowElement.querySelector('.status-text');
-        statusText.textContent = '页面加载完成';
+        const proxyIndicator = this.windowElement.querySelector('#proxy-indicator');
+        const isUsingProxy = this.shouldUseProxy(this.currentUrl);
+        
+        if (isUsingProxy) {
+            statusText.textContent = '页面加载完成（已使用代理）';
+            statusText.style.color = '#28a745';
+            proxyIndicator.textContent = '🔄';
+            proxyIndicator.title = '已通过代理访问';
+            proxyIndicator.style.color = '#28a745';
+        } else {
+            statusText.textContent = '页面加载完成';
+            statusText.style.color = '';
+            proxyIndicator.textContent = '🔗';
+            proxyIndicator.title = '直接访问';
+            proxyIndicator.style.color = '#6c757d';
+        }
     }
 
     onPageError() {
