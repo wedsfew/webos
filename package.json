@@ -1,0 +1,43 @@
+{
+  "name": "webos-desktop",
+  "version": "1.0.0",
+  "description": "基于Web的桌面操作系统，在浏览器中提供完整的桌面体验",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js --dev",
+    "serve": "node server.js --port 3000",
+    "build": "echo 'WebOS Desktop is ready to run!'",
+    "test": "echo 'No tests available yet'"
+  },
+  "keywords": [
+    "webos",
+    "desktop",
+    "web-os",
+    "operating-system",
+    "browser-desktop",
+    "javascript",
+    "html5"
+  ],
+  "author": "WebOS Desktop Team",
+  "license": "MIT",
+  "dependencies": {
+    "express": "^4.18.2",
+    "cors": "^2.8.5",
+    "open": "^8.4.0"
+  },
+  "devDependencies": {
+    "nodemon": "^2.0.20"
+  },
+  "engines": {
+    "node": ">=14.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/webos-desktop/webos-desktop.git"
+  },
+  "bugs": {
+    "url": "https://github.com/webos-desktop/webos-desktop/issues"
+  },
+  "homepage": "https://webos-desktop.github.io"
+} 
