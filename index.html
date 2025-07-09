@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebOS Desktop</title>
+    <link rel="stylesheet" href="styles/desktop.css">
+    <link rel="stylesheet" href="styles/apps.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+</head>
+<body>
+    <!-- 桌面环境 -->
+    <div id="desktop">
+        <!-- 桌面图标 -->
+        <div class="desktop-icons">
+            <div class="desktop-icon" data-app="filemanager">
+                <i class="fas fa-folder"></i>
+                <span>文件管理器</span>
+            </div>
+            <div class="desktop-icon" data-app="texteditor">
+                <i class="fas fa-file-text"></i>
+                <span>文本编辑器</span>
+            </div>
+            <div class="desktop-icon" data-app="calculator">
+                <i class="fas fa-calculator"></i>
+                <span>计算器</span>
+            </div>
+            <div class="desktop-icon" data-app="terminal">
+                <i class="fas fa-terminal"></i>
+                <span>终端</span>
+            </div>
+            <div class="desktop-icon" data-app="settings">
+                <i class="fas fa-cog"></i>
+                <span>设置</span>
+            </div>
+        </div>
+
+        <!-- 窗口容器 -->
+        <div id="windows-container"></div>
+
+        <!-- 任务栏 -->
+        <div id="taskbar">
+            <div class="taskbar-left">
+                <button id="start-button">
+                    <i class="fas fa-th"></i>
+                    <span>开始</span>
+                </button>
+                <div id="taskbar-apps"></div>
+            </div>
+            <div class="taskbar-right">
+                <div id="system-tray">
+                    <span id="clock"></span>
+                    <div class="tray-icon" title="网络">
+                        <i class="fas fa-wifi"></i>
+                    </div>
+                    <div class="tray-icon" title="音量">
+                        <i class="fas fa-volume-up"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 开始菜单 -->
+        <div id="start-menu" class="hidden">
+            <div class="start-menu-header">
+                <h3>WebOS Desktop</h3>
+            </div>
+            <div class="start-menu-apps">
+                <div class="start-menu-item" data-app="filemanager">
+                    <i class="fas fa-folder"></i>
+                    <span>文件管理器</span>
+                </div>
+                <div class="start-menu-item" data-app="texteditor">
+                    <i class="fas fa-file-text"></i>
+                    <span>文本编辑器</span>
+                </div>
+                <div class="start-menu-item" data-app="calculator">
+                    <i class="fas fa-calculator"></i>
+                    <span>计算器</span>
+                </div>
+                <div class="start-menu-item" data-app="terminal">
+                    <i class="fas fa-terminal"></i>
+                    <span>终端</span>
+                </div>
+                <div class="start-menu-item" data-app="settings">
+                    <i class="fas fa-cog"></i>
+                    <span>设置</span>
+                </div>
+            </div>
+            <div class="start-menu-footer">
+                <button class="power-button" title="关机">
+                    <i class="fas fa-power-off"></i>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 应用程序模板 -->
+    <template id="window-template">
+        <div class="window">
+            <div class="window-header">
+                <div class="window-title"></div>
+                <div class="window-controls">
+                    <button class="window-minimize"><i class="fas fa-minus"></i></button>
+                    <button class="window-maximize"><i class="fas fa-square"></i></button>
+                    <button class="window-close"><i class="fas fa-times"></i></button>
+                </div>
+            </div>
+            <div class="window-content"></div>
+        </div>
+    </template>
+
+    <!-- 应用程序脚本 -->
+    <script src="js/desktop.js"></script>
+    <script src="js/window-manager.js"></script>
+    <script src="js/apps/filemanager.js"></script>
+    <script src="js/apps/texteditor.js"></script>
+    <script src="js/apps/calculator.js"></script>
+    <script src="js/apps/terminal.js"></script>
+    <script src="js/apps/settings.js"></script>
+</body>
+</html> 
