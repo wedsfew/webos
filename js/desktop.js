@@ -113,6 +113,10 @@ class Desktop {
             case 'terminal':
                 app = new Terminal();
                 break;
+            case 'browser':
+                app = new BrowserApp(this.windowManager);
+                window.browserApp = app; // 设置全局引用
+                break;
             case 'settings':
                 app = new Settings();
                 break;
